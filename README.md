@@ -14,6 +14,7 @@
 - Settings for trackbar color, visible controls, window size memory, custom speed steps, shortcuts, and click-to-play/pause.
 - Site adapters for YouTube, Netflix, Disney+, Prime Video, and Twitch.
 - Generic fallback for sites without a custom adapter.
+- Experimental selected element PiP fallback for normal pages without video, with a uBlock-style picker. Elements may not stay interactive.
 - No analytics, background network calls, or broad host permissions.
 
 ## Screenshots

@@ -37,9 +37,8 @@
 
     const adapter = window.FloatlyAdapters?.match() ?? {};
     const video = findVideo(adapter);
-    if (!video) {
-      return;
-    }
+    const [css, settings] = await Promise.all([loadCss(), loadSettings()]);
+    if (!video) return openSelectedElementPiP(css);
 
     const restore = {
       className: video.className,
@@ -47,7 +46,6 @@
       host: video.parentElement,
       nextSibling: video.nextSibling,
     };
-    const [css, settings] = await Promise.all([loadCss(), loadSettings()]);
     const pip = await documentPictureInPicture.requestWindow(
       getWindowSize(video, settings),
     );
@@ -71,6 +69,233 @@
       },
       { once: true },
     );
+  }
+
+  async function openSelectedElementPiP(css) {
+    const target = await pickElement();
+    if (!target) return;
+
+    const rect = target.getBoundingClientRect();
+    const restore = {
+      className: target.className,
+      style: target.getAttribute("style"),
+      host: target.parentElement,
+      nextSibling: target.nextSibling,
+    };
+    const pip = await documentPictureInPicture.requestWindow({
+      width: Math.max(360, Math.min(900, Math.round(rect.width || 640))),
+      height: Math.max(240, Math.min(700, Math.round(rect.height || 420))),
+    });
+    const shell = el(pip.document, "main", { className: "floatly-shell floatly-element-shell" });
+
+    copyPageStyles(pip.document);
+    pip.document.head.appendChild(el(pip.document, "style", { textContent: css }));
+    target.classList.add("floatly-selected-element");
+    shell.append(target);
+    pip.document.body.append(shell);
+    state.pip = pip;
+
+    pip.addEventListener(
+      "pagehide",
+      () => {
+        restore.host?.insertBefore(target, restore.nextSibling);
+        target.className = restore.className;
+        restore.style === null
+          ? target.removeAttribute("style")
+          : target.setAttribute("style", restore.style);
+        state.pip = null;
+      },
+      { once: true },
+    );
+  }
+
+  function pickElement() {
+    return new Promise((resolve) => {
+      const candidates = [];
+      let current = null;
+      let candidateIndex = 0;
+      let locked = false;
+      const overlay = el(document, "div", { className: "floatly-picker-overlay" });
+      const panel = el(document, "div", { className: "floatly-picker-panel" });
+      const warning = el(document, "div", {
+        className: "floatly-picker-warning",
+        textContent: "Element PiP is experimental; selected elements may not stay interactive.",
+      });
+      const label = el(document, "div", { className: "floatly-picker-label" });
+      const pick = el(document, "button", { type: "button", textContent: "Pick" });
+      const parent = el(document, "button", { type: "button", textContent: "Parent" });
+      const child = el(document, "button", { type: "button", textContent: "Child" });
+      const cancel = el(document, "button", { type: "button", textContent: "Cancel" });
+
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 2147483646;
+        box-sizing: border-box;
+        border: 2px solid #45d19f;
+        background: rgb(69 209 159 / 0.12);
+        pointer-events: none;
+        transform: translate(-9999px, -9999px);
+      `;
+      panel.style.cssText = `
+        position: fixed;
+        right: 14px;
+        bottom: 14px;
+        z-index: 2147483647;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+        align-items: center;
+        gap: 8px;
+        max-width: min(620px, calc(100vw - 28px));
+        padding: 10px;
+        border-radius: 8px;
+        color: #f7f7f7;
+        background: rgb(16 18 21 / 0.96);
+        box-shadow: 0 10px 32px rgb(0 0 0 / 0.35);
+        font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      `;
+      label.style.cssText = `
+        min-width: 0;
+        grid-column: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      `;
+      warning.style.cssText = `
+        grid-column: 1 / -1;
+        color: #f6c96b;
+        font-size: 12px;
+      `;
+      for (const button of [pick, parent, child, cancel]) {
+        button.style.cssText = `
+          height: 30px;
+          padding: 0 10px;
+          border: 1px solid rgb(255 255 255 / 0.18);
+          border-radius: 6px;
+          color: inherit;
+          background: rgb(255 255 255 / 0.08);
+          cursor: pointer;
+        `;
+      }
+      panel.append(warning, label, pick, parent, child, cancel);
+
+      function cleanup(value = null) {
+        overlay.remove();
+        panel.remove();
+        document.removeEventListener("mousemove", onMove, true);
+        document.removeEventListener("click", onClick, true);
+        document.removeEventListener("keydown", onKeyDown, true);
+        resolve(value);
+      }
+
+      function onMove(event) {
+        if (locked) return;
+        const target = document.elementFromPoint(event.clientX, event.clientY);
+        if (!isPickable(target)) return;
+
+        setCurrent(target);
+      }
+
+      function onClick(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.target === pick) return cleanup(current);
+        if (event.target === parent) return selectRelative(1);
+        if (event.target === child) return selectRelative(-1);
+        if (event.target === cancel) return cleanup();
+
+        locked = true;
+        panel.hidden = false;
+      }
+
+      function onKeyDown(event) {
+        if (event.key === "Enter" && locked) {
+          event.preventDefault();
+          event.stopPropagation();
+          cleanup(current);
+          return;
+        }
+
+        if (event.key === "ArrowUp" && locked) {
+          event.preventDefault();
+          event.stopPropagation();
+          selectRelative(1);
+          return;
+        }
+
+        if (event.key === "ArrowDown" && locked) {
+          event.preventDefault();
+          event.stopPropagation();
+          selectRelative(-1);
+          return;
+        }
+
+        if (event.key !== "Escape") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        cleanup();
+      }
+
+      function selectRelative(offset) {
+        if (!candidates.length) return;
+
+        candidateIndex = Math.max(0, Math.min(candidates.length - 1, candidateIndex + offset));
+        current = candidates[candidateIndex];
+        drawOverlay(current);
+      }
+
+      function setCurrent(target) {
+        current = target;
+        candidates.length = 0;
+        for (let node = target; isPickable(node); node = node.parentElement) {
+          candidates.push(node);
+        }
+        candidateIndex = 0;
+        drawOverlay(current);
+      }
+
+      function drawOverlay(target) {
+        const rect = target.getBoundingClientRect();
+        overlay.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
+        overlay.style.width = `${rect.width}px`;
+        overlay.style.height = `${rect.height}px`;
+        label.textContent = describeElement(target);
+        parent.disabled = candidateIndex >= candidates.length - 1;
+        child.disabled = candidateIndex <= 0;
+      }
+
+      function isPickable(target) {
+        return target instanceof Element
+          && target !== document.body
+          && target !== document.documentElement
+          && target !== overlay
+          && target !== panel
+          && !panel.contains(target);
+      }
+
+      function describeElement(target) {
+        const id = target.id ? `#${target.id}` : "";
+        const classes = [...target.classList].slice(0, 3).map((name) => `.${name}`).join("");
+        return `${target.tagName.toLowerCase()}${id}${classes}`;
+      }
+
+      document.body.append(overlay);
+      document.body.append(panel);
+      panel.hidden = true;
+      document.addEventListener("mousemove", onMove, true);
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    });
+  }
+
+  function copyPageStyles(targetDocument) {
+    for (const node of document.querySelectorAll('link[rel~="stylesheet"], style')) {
+      const clone = node.cloneNode(true);
+      if (clone.href) clone.href = new URL(clone.getAttribute("href"), document.baseURI).href;
+      targetDocument.head.append(clone);
+    }
   }
 
   function findVideo(adapter) {
