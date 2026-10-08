@@ -1,5 +1,6 @@
 const defaultSettings = {
   accentColor: "#45d19f",
+  clickVideoToTogglePlayback: true,
   rememberWindowSize: false,
   windowSize: null,
   speedSteps: [0.5, 0.75, 1, 1.25, 1.5, 2],
@@ -41,6 +42,7 @@ const shortcutLabels = {
 
 const colorInput = document.querySelector("#accentColor");
 const controls = document.querySelector("#controls");
+const clickVideoToTogglePlayback = document.querySelector("#clickVideoToTogglePlayback");
 const rememberWindowSize = document.querySelector("#rememberWindowSize");
 const speedSteps = document.querySelector("#speedSteps");
 const shortcuts = document.querySelector("#shortcuts");
@@ -59,7 +61,7 @@ async function getSettings() {
 }
 
 function mergeSettings(settings) {
-  return {
+  const merged = {
     ...defaultSettings,
     ...settings,
     controls: {
@@ -71,10 +73,15 @@ function mergeSettings(settings) {
       ...settings?.shortcuts
     }
   };
+  if (typeof settings?.clickVideoToPause === "boolean") {
+    merged.clickVideoToTogglePlayback = settings.clickVideoToPause;
+  }
+  return merged;
 }
 
 function render(settings) {
   colorInput.value = settings.accentColor;
+  clickVideoToTogglePlayback.checked = settings.clickVideoToTogglePlayback;
   rememberWindowSize.checked = settings.rememberWindowSize;
   speedSteps.value = settings.speedSteps.join(", ");
   controls.textContent = "";
@@ -112,6 +119,13 @@ colorInput.addEventListener("input", async () => {
 reset.addEventListener("click", async () => {
   await save(defaultSettings);
   render(defaultSettings);
+});
+
+clickVideoToTogglePlayback.addEventListener("change", async () => {
+  const settings = await getSettings();
+  settings.clickVideoToTogglePlayback = clickVideoToTogglePlayback.checked;
+  delete settings.clickVideoToPause;
+  await save(settings);
 });
 
 rememberWindowSize.addEventListener("change", async () => {

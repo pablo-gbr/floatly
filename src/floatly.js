@@ -3,6 +3,7 @@
   const rates = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const defaultSettings = {
     accentColor: "#45d19f",
+    clickVideoToTogglePlayback: true,
     rememberWindowSize: false,
     windowSize: null,
     speedSteps: rates,
@@ -201,6 +202,13 @@
     controls.append(row);
     shell.append(video, controls);
     pip.document.body.append(shell);
+
+    if (settings.clickVideoToTogglePlayback) {
+      shell.addEventListener("click", (event) => {
+        if (controls.contains(event.target)) return;
+        video.paused ? video.play() : video.pause();
+      });
+    }
 
     play.addEventListener("click", () =>
       video.paused ? video.play() : video.pause(),

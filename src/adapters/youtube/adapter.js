@@ -12,15 +12,32 @@
         height: 100%;
         position: absolute;
         inset: 0;
+        z-index: 1;
+        display: flex !important;
+        align-items: flex-end !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
+        padding: 0 2% 28px !important;
         pointer-events: none;
       }
 
+      body:hover .ytp-caption-window-container {
+        padding-bottom: 58px !important;
+      }
+
       .caption-window {
+        position: static !important;
+        inset: auto !important;
+        transform: none !important;
+        width: auto !important;
+        max-width: 96% !important;
+        margin: 0 auto !important;
+        text-align: center !important;
         pointer-events: auto;
       }
 
       body:hover .caption-window.ytp-caption-window-bottom {
-        margin-bottom: 49px;
+        margin-bottom: 0 !important;
       }
 
       .ytp-caption-segment {
