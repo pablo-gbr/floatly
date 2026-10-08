@@ -342,8 +342,10 @@
 
   function formatTime(seconds) {
     const safeSeconds = Math.max(0, Math.floor(seconds || 0));
-    const minutes = Math.floor(safeSeconds / 60);
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
     const remainder = String(safeSeconds % 60).padStart(2, "0");
+    if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${remainder}`;
     return `${minutes}:${remainder}`;
   }
 
