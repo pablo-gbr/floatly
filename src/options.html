@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Floatly Settings</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="title">
+          <img class="settings-icon" src="../assets/icon1024.png" alt="" width="44" height="44">
+          <h1>Floatly Settings</h1>
+        </div>
+        <button id="reset" type="button">Reset</button>
+      </header>
+
+      <section>
+        <h2>Controls</h2>
+        <label class="color-row">
+          <span>Trackbar color</span>
+          <input id="accentColor" type="color">
+        </label>
+        <div id="controls" class="grid"></div>
+      </section>
+
+      <section>
+        <h2>Window</h2>
+        <label><input id="rememberWindowSize" type="checkbox"> Remember last window size</label>
+      </section>
+
+      <section>
+        <h2>Speed</h2>
+        <label class="field">
+          <span>Speed steps, up to 6</span>
+          <input id="speedSteps" type="text" inputmode="decimal" spellcheck="false">
+        </label>
+      </section>
+
+      <section>
+        <h2>Shortcuts</h2>
+        <div id="shortcuts" class="grid"></div>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

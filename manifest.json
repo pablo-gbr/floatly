@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Floatly",
+  "description": "Open the current page's main video in a lightweight floating player.",
+  "version": "0.1.0",
+  "icons": {
+    "48": "assets/icon48.png",
+    "1024": "assets/icon1024.png",
+    "128": "assets/icon128.png"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Floatly",
+    "default_icon": {
+      "19": "assets/icon19.png",
+      "38": "assets/icon38.png"
+    }
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "windows": "Alt+P",
+        "mac": "Alt+P",
+        "chromeos": "Alt+P",
+        "linux": "Alt+P"
+      }
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/floatly.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

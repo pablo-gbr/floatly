@@ -1,0 +1,141 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f7f8fa;
+  color: #17191d;
+  --border: rgb(20 24 31 / 0.14);
+  --button-bg: rgb(20 24 31 / 0.06);
+  --button-bg-hover: rgb(20 24 31 / 0.1);
+  --muted: #68707d;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-icon {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 650;
+}
+
+h1 {
+  font-size: 28px;
+}
+
+h2 {
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+section {
+  padding: 20px 0;
+  border-top: 1px solid var(--border);
+}
+
+label,
+.color-row,
+.field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+}
+
+.color-row {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.field {
+  justify-content: space-between;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 16px;
+}
+
+input[type="color"] {
+  width: 52px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+input[type="text"] {
+  width: min(240px, 52vw);
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: inherit;
+  background: Canvas;
+}
+
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #45d19f;
+}
+
+button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: inherit;
+  background: var(--button-bg);
+  cursor: pointer;
+}
+
+button:hover,
+button:focus-visible {
+  background: var(--button-bg-hover);
+  outline: none;
+}
+
+label:has(input:disabled) {
+  color: var(--muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    background: #101215;
+    color: #f4f4f5;
+    --border: rgb(255 255 255 / 0.12);
+    --button-bg: rgb(255 255 255 / 0.08);
+    --button-bg-hover: rgb(255 255 255 / 0.14);
+    --muted: #8e939d;
+  }
+}
