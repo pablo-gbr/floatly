@@ -34,7 +34,8 @@
       return;
     }
 
-    const video = findVideo();
+    const adapter = window.FloatlyAdapters?.match() ?? {};
+    const video = findVideo(adapter);
     if (!video) {
       return;
     }
@@ -49,13 +50,17 @@
     const pip = await documentPictureInPicture.requestWindow(
       getWindowSize(video, settings),
     );
+    const cleanup = [];
 
     state.pip = pip;
-    renderPlayer(pip, video, css, settings);
+    const context = renderPlayer(pip, video, css, settings, adapter, cleanup);
+    adapter.onEnter?.(context);
 
     pip.addEventListener(
       "pagehide",
       () => {
+        adapter.onExit?.(context);
+        while (cleanup.length) cleanup.pop()?.();
         restore.host?.insertBefore(video, restore.nextSibling);
         video.className = restore.className;
         restore.style === null
@@ -67,12 +72,14 @@
     );
   }
 
-  function findVideo() {
+  function findVideo(adapter) {
+    const customVideo = adapter.findVideo?.();
+    if (customVideo) return customVideo;
+
     const videos = [...document.querySelectorAll("video")]
       .filter((video) => video.readyState > 0 && !video.disablePictureInPicture)
       .sort((a, b) => area(b) - area(a));
 
-    // TODO: upgrade to site adapters if captions/DRM quirks matter.
     return videos[0] ?? null;
   }
 
@@ -120,9 +127,9 @@
     };
   }
 
-  function renderPlayer(pip, video, css, settings) {
+  function renderPlayer(pip, video, css, settings, adapter, cleanup) {
     pip.document.head.appendChild(
-      el(pip.document, "style", { textContent: css }),
+      el(pip.document, "style", { textContent: `${css}\n${adapter.styles ?? ""}` }),
     );
     pip.document.documentElement.style.setProperty(
       "--floatly-accent",
@@ -159,21 +166,38 @@
       title: "Volume",
     });
     const fit = button(pip.document, "Crop / fit video", icons.crop);
+    const next = button(pip.document, "Next video", icons.next);
     const time = el(pip.document, "span", {
       className: "floatly-time",
       textContent: "0:00",
     });
+    const controlsConfig = {
+      ...settings.controls,
+      ...adapter.controls,
+    };
+    const context = {
+      pip,
+      video,
+      shell,
+      controls,
+      row,
+      progress,
+      addCleanup(fn) {
+        cleanup.push(fn);
+      },
+    };
 
     video.classList.add("floatly-video");
     row.append(play);
-    appendIf(row, settings.controls.rewind, rewind);
-    appendIf(row, settings.controls.forward, forward);
-    if (settings.controls.speed) row.append(speed, speedMenu);
+    appendIf(row, controlsConfig.rewind, rewind);
+    appendIf(row, controlsConfig.forward, forward);
+    if (controlsConfig.speed) row.append(speed, speedMenu);
+    appendIf(row, controlsConfig.next, next);
     row.append(mute);
-    appendIf(row, settings.controls.volume, volume);
-    appendIf(row, settings.controls.fit, fit);
-    appendIf(row, settings.controls.time, time);
-    appendIf(controls, settings.controls.progress, progress);
+    appendIf(row, controlsConfig.volume, volume);
+    appendIf(row, controlsConfig.fit, fit);
+    appendIf(row, controlsConfig.time, time);
+    appendIf(controls, controlsConfig.progress, progress);
     controls.append(row);
     shell.append(video, controls);
     pip.document.body.append(shell);
@@ -181,9 +205,10 @@
     play.addEventListener("click", () =>
       video.paused ? video.play() : video.pause(),
     );
-    rewind.addEventListener("click", () => seekBy(video, -10));
-    forward.addEventListener("click", () => seekBy(video, 10));
+    rewind.addEventListener("click", () => seekBy(context, -10, adapter));
+    forward.addEventListener("click", () => seekBy(context, 10, adapter));
     speed.addEventListener("click", () => speedMenu.toggleAttribute("hidden"));
+    next.addEventListener("click", () => adapter.nextVideo?.(context));
     mute.addEventListener("click", () => {
       video.muted = !video.muted;
     });
@@ -195,15 +220,15 @@
       );
     });
     progress.addEventListener("input", () => {
-      if (Number.isFinite(video.duration))
-        video.currentTime = (progress.valueAsNumber / 1000) * video.duration;
+      const duration = getDuration(context, adapter);
+      if (Number.isFinite(duration)) seekTo(context, (progress.valueAsNumber / 1000) * duration, adapter);
     });
     volume.addEventListener("input", () => {
       video.volume = volume.valueAsNumber / 100;
       video.muted = video.volume === 0;
     });
     pip.addEventListener("keydown", (event) =>
-      handleKeys(event, video, settings.shortcuts),
+      handleKeys(event, context, settings.shortcuts, adapter),
     );
     pip.addEventListener("resize", () => {
       resizeVideoToWindow(pip, video);
@@ -216,14 +241,15 @@
         video.muted || video.volume === 0 ? icons.muted : icons.volume;
       volume.value = String(video.muted ? 0 : Math.round(video.volume * 100));
       setRangeFill(volume, video.muted ? 0 : video.volume * 100);
-      progress.disabled = !Number.isFinite(video.duration);
-      if (Number.isFinite(video.duration)) {
+      const duration = getDuration(context, adapter);
+      progress.disabled = !Number.isFinite(duration);
+      if (Number.isFinite(duration)) {
         progress.value = String(
-          Math.round((video.currentTime / video.duration) * 1000),
+          Math.round((video.currentTime / duration) * 1000),
         );
         setRangeFill(progress, progress.valueAsNumber / 10);
       }
-      time.textContent = `${formatTime(video.currentTime)}${Number.isFinite(video.duration) ? ` / ${formatTime(video.duration)}` : ""}`;
+      time.textContent = `${formatTime(video.currentTime)}${Number.isFinite(duration) ? ` / ${formatTime(duration)}` : ""}`;
       markCurrentRate(speedMenu, video.playbackRate);
       resizeVideoToWindow(pip, video);
     };
@@ -240,6 +266,7 @@
       video.addEventListener(name, sync);
     });
     sync();
+    return context;
   }
 
   function button(document, title, icon) {
@@ -289,11 +316,23 @@
     }
   }
 
-  function seekBy(video, seconds) {
-    video.currentTime = Math.max(
+  function seekBy(context, seconds, adapter) {
+    if (adapter.seekBy?.(context, seconds)) return;
+
+    context.video.currentTime = Math.max(
       0,
-      Math.min(video.duration || Infinity, video.currentTime + seconds),
+      Math.min(getDuration(context, adapter) || Infinity, context.video.currentTime + seconds),
     );
+  }
+
+  function seekTo(context, seconds, adapter) {
+    if (adapter.seekTo?.(context, seconds)) return;
+
+    context.video.currentTime = Math.max(0, Math.min(getDuration(context, adapter) || Infinity, seconds));
+  }
+
+  function getDuration(context, adapter) {
+    return adapter.getDuration?.(context) ?? context.video.duration;
   }
 
   function resizeVideoToWindow(pip, video) {
@@ -322,17 +361,17 @@
     });
   }
 
-  function handleKeys(event, video, shortcuts) {
+  function handleKeys(event, context, shortcuts, adapter) {
     if (event.key === shortcuts.playPause) {
-      video.paused ? video.play() : video.pause();
+      context.video.paused ? context.video.play() : context.video.pause();
     } else if (event.key === shortcuts.rewind) {
-      seekBy(video, -10);
+      seekBy(context, -10, adapter);
     } else if (event.key === shortcuts.forward) {
-      seekBy(video, 10);
+      seekBy(context, 10, adapter);
     } else if (event.key === shortcuts.volumeUp) {
-      video.volume = Math.min(1, video.volume + 0.1);
+      context.video.volume = Math.min(1, context.video.volume + 0.1);
     } else if (event.key === shortcuts.volumeDown) {
-      video.volume = Math.max(0, video.volume - 0.1);
+      context.video.volume = Math.max(0, context.video.volume - 0.1);
     } else {
       return;
     }
@@ -360,6 +399,7 @@
     pause: `<svg ${iconAttrs}><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>`,
     rewind: `<svg ${iconAttrs}><path d="M11 18V6l-8.5 6zm1.5-6 8.5 6V6z"/></svg>`,
     forward: `<svg ${iconAttrs}><path d="M13 6v12l8.5-6zM2.5 18 11 12 2.5 6z"/></svg>`,
+    next: `<svg ${iconAttrs}><path d="M6 18l8.5-6L6 6zm10-12h2v12h-2z"/></svg>`,
     speed: `<svg ${iconAttrs}><path d="M12 4a10 10 0 0 0-8.66 15h17.32A10 10 0 0 0 12 4m0 2a8 8 0 0 1 7.45 11H4.55A8 8 0 0 1 12 6m1 7.59 3.54-3.55 1.42 1.42L13 16.41l-3.54-3.53 1.42-1.42z"/></svg>`,
     volume: `<svg ${iconAttrs}><path d="M4 9v6h4l5 4V5L8 9zm11.5-.5v7a4 4 0 0 0 0-7m0-3.5v2.1a6 6 0 0 1 0 9.8V19a8 8 0 0 0 0-14"/></svg>`,
     muted: `<svg ${iconAttrs}><path d="M4 9v6h4l5 4V5L8 9zm13.59 3-2.3-2.29 1.42-1.42L19 10.59l2.29-2.3 1.42 1.42L20.41 12l2.3 2.29-1.42 1.42L19 13.41l-2.29 2.3-1.42-1.42z"/></svg>`,

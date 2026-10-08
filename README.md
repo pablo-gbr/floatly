@@ -22,3 +22,7 @@ There are no analytics, background network calls, or broad host permissions.
 ## Settings
 
 Open Floatly's options page from `chrome://extensions` to change the trackbar color, hide controls, remember the floating window size, edit up to 6 speed steps, and customize in-player shortcut keys.
+
+## Site Adapters
+
+Site-specific behavior lives in `src/adapters`. Floatly currently includes adapters for YouTube, Netflix, Disney+, Prime Video, and Twitch, then falls back to the generic video picker on every other site.
