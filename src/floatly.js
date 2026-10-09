@@ -45,10 +45,18 @@
       style: video.getAttribute("style"),
       host: video.parentElement,
       nextSibling: video.nextSibling,
+      marker: document.createComment("floatly-video-placeholder"),
     };
-    const pip = await documentPictureInPicture.requestWindow(
-      getWindowSize(video, settings),
-    );
+    restore.host?.insertBefore(restore.marker, restore.nextSibling);
+    let pip;
+    try {
+      pip = await documentPictureInPicture.requestWindow(
+        getWindowSize(video, settings),
+      );
+    } catch (error) {
+      restore.marker.remove();
+      throw error;
+    }
     const cleanup = [];
 
     state.pip = pip;
@@ -58,14 +66,13 @@
     pip.addEventListener(
       "pagehide",
       () => {
-        adapter.onExit?.(context);
-        while (cleanup.length) cleanup.pop()?.();
-        restore.host?.insertBefore(video, restore.nextSibling);
-        video.className = restore.className;
-        restore.style === null
-          ? video.removeAttribute("style")
-          : video.setAttribute("style", restore.style);
-        state.pip = null;
+        try {
+          adapter.onExit?.(context);
+          while (cleanup.length) cleanup.pop()?.();
+          restoreNode(video, restore);
+        } finally {
+          state.pip = null;
+        }
       },
       { once: true },
     );
@@ -81,11 +88,19 @@
       style: target.getAttribute("style"),
       host: target.parentElement,
       nextSibling: target.nextSibling,
+      marker: document.createComment("floatly-element-placeholder"),
     };
-    const pip = await documentPictureInPicture.requestWindow({
-      width: Math.max(360, Math.min(900, Math.round(rect.width || 640))),
-      height: Math.max(240, Math.min(700, Math.round(rect.height || 420))),
-    });
+    restore.host?.insertBefore(restore.marker, restore.nextSibling);
+    let pip;
+    try {
+      pip = await documentPictureInPicture.requestWindow({
+        width: Math.max(360, Math.min(900, Math.round(rect.width || 640))),
+        height: Math.max(240, Math.min(700, Math.round(rect.height || 420))),
+      });
+    } catch (error) {
+      restore.marker.remove();
+      throw error;
+    }
     const shell = el(pip.document, "main", { className: "floatly-shell floatly-element-shell" });
 
     copyPageStyles(pip.document);
@@ -98,15 +113,25 @@
     pip.addEventListener(
       "pagehide",
       () => {
-        restore.host?.insertBefore(target, restore.nextSibling);
-        target.className = restore.className;
-        restore.style === null
-          ? target.removeAttribute("style")
-          : target.setAttribute("style", restore.style);
-        state.pip = null;
+        try {
+          restoreNode(target, restore);
+        } finally {
+          state.pip = null;
+        }
       },
       { once: true },
     );
+  }
+
+  function restoreNode(node, restore) {
+    const parent = restore.marker.parentNode ?? restore.host;
+
+    parent?.insertBefore(node, restore.marker.parentNode ? restore.marker : null);
+    restore.marker.remove();
+    node.className = restore.className;
+    restore.style === null
+      ? node.removeAttribute("style")
+      : node.setAttribute("style", restore.style);
   }
 
   function pickElement() {

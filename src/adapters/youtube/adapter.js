@@ -6,6 +6,11 @@
     controls: {
       next: true
     },
+    findVideo() {
+      return document.querySelector(".html5-main-video")
+        ?? document.querySelector("#movie_player video")
+        ?? document.querySelector("video");
+    },
     styles: `
       .ytp-caption-window-container {
         width: 100%;
