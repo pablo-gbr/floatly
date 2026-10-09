@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Floatly",
   "description": "Open the current page's main video in a lightweight floating player.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "icons": {
     "48": "assets/icon48.png",
     "1024": "assets/icon1024.png",
