@@ -26,6 +26,7 @@
   };
 
   if ("documentPictureInPicture" in window && documentPictureInPicture.window) {
+    state.restore?.();
     documentPictureInPicture.window.close();
     return;
   }
@@ -47,6 +48,9 @@
       nextSibling: video.nextSibling,
       marker: document.createComment("floatly-video-placeholder"),
       getParent: adapter.getRestoreParent,
+      getNextSibling: adapter.getRestoreNextSibling,
+      beforeRestore: adapter.beforeRestore,
+      onRestored: adapter.onRestored,
     };
     restore.host?.insertBefore(restore.marker, restore.nextSibling);
     let pip;
@@ -63,19 +67,25 @@
     state.pip = pip;
     const context = renderPlayer(pip, video, css, settings, adapter, cleanup);
     adapter.onEnter?.(context);
+    let restored = false;
+    const restorePiP = () => {
+      if (restored) return;
 
-    pip.addEventListener(
-      "pagehide",
-      () => {
-        try {
-          restoreNode(video, restore);
-          runCleanup([...cleanup, () => adapter.onExit?.(context)]);
-        } finally {
-          state.pip = null;
-        }
-      },
-      { once: true },
-    );
+      restored = true;
+      try {
+        const afterRestore = restore.beforeRestore?.(context);
+        restoreNode(video, restore);
+        runCleanup([...cleanup, () => adapter.onExit?.(context)]);
+        afterRestore?.();
+      } finally {
+        state.pip = null;
+        state.restore = null;
+      }
+    };
+    state.restore = restorePiP;
+
+    pip.addEventListener("pagehide", restorePiP, { once: true });
+    pip.addEventListener("unload", restorePiP, { once: true });
   }
 
   async function openSelectedElementPiP(css) {
@@ -101,10 +111,14 @@
       restore.marker.remove();
       throw error;
     }
-    const shell = el(pip.document, "main", { className: "floatly-shell floatly-element-shell" });
+    const shell = el(pip.document, "main", {
+      className: "floatly-shell floatly-element-shell",
+    });
 
     copyPageStyles(pip.document);
-    pip.document.head.appendChild(el(pip.document, "style", { textContent: css }));
+    pip.document.head.appendChild(
+      el(pip.document, "style", { textContent: css }),
+    );
     target.classList.add("floatly-selected-element");
     shell.append(target);
     pip.document.body.append(shell);
@@ -126,18 +140,23 @@
   function restoreNode(node, restore) {
     const markerParent = restore.marker.parentNode;
     const liveParent = restore.getParent?.();
-    const parent = markerParent
-      ?? (liveParent?.isConnected ? liveParent : null)
-      ?? (restore.host?.isConnected ? restore.host : null)
-      ?? liveParent
-      ?? restore.host;
+    const parent =
+      (liveParent?.isConnected ? liveParent : null) ??
+      markerParent ??
+      (restore.host?.isConnected ? restore.host : null) ??
+      liveParent ??
+      restore.host;
 
-    parent?.insertBefore(node, markerParent ? restore.marker : null);
-    restore.marker.remove();
     node.className = restore.className;
     restore.style === null
       ? node.removeAttribute("style")
       : node.setAttribute("style", restore.style);
+    parent?.insertBefore(
+      node,
+      parent === markerParent ? restore.marker : restore.getNextSibling?.(),
+    );
+    restore.marker.remove();
+    restore.onRestored?.(node);
   }
 
   function runCleanup(cleanup) {
@@ -156,17 +175,32 @@
       let current = null;
       let candidateIndex = 0;
       let locked = false;
-      const overlay = el(document, "div", { className: "floatly-picker-overlay" });
+      const overlay = el(document, "div", {
+        className: "floatly-picker-overlay",
+      });
       const panel = el(document, "div", { className: "floatly-picker-panel" });
       const warning = el(document, "div", {
         className: "floatly-picker-warning",
-        textContent: "Element PiP is experimental; selected elements may not stay interactive.",
+        textContent:
+          "Element PiP is experimental; selected elements may not stay interactive.",
       });
       const label = el(document, "div", { className: "floatly-picker-label" });
-      const pick = el(document, "button", { type: "button", textContent: "Pick" });
-      const parent = el(document, "button", { type: "button", textContent: "Parent" });
-      const child = el(document, "button", { type: "button", textContent: "Child" });
-      const cancel = el(document, "button", { type: "button", textContent: "Cancel" });
+      const pick = el(document, "button", {
+        type: "button",
+        textContent: "Pick",
+      });
+      const parent = el(document, "button", {
+        type: "button",
+        textContent: "Parent",
+      });
+      const child = el(document, "button", {
+        type: "button",
+        textContent: "Child",
+      });
+      const cancel = el(document, "button", {
+        type: "button",
+        textContent: "Cancel",
+      });
 
       overlay.style.cssText = `
         position: fixed;
@@ -282,7 +316,10 @@
       function selectRelative(offset) {
         if (!candidates.length) return;
 
-        candidateIndex = Math.max(0, Math.min(candidates.length - 1, candidateIndex + offset));
+        candidateIndex = Math.max(
+          0,
+          Math.min(candidates.length - 1, candidateIndex + offset),
+        );
         current = candidates[candidateIndex];
         drawOverlay(current);
       }
@@ -308,17 +345,22 @@
       }
 
       function isPickable(target) {
-        return target instanceof Element
-          && target !== document.body
-          && target !== document.documentElement
-          && target !== overlay
-          && target !== panel
-          && !panel.contains(target);
+        return (
+          target instanceof Element &&
+          target !== document.body &&
+          target !== document.documentElement &&
+          target !== overlay &&
+          target !== panel &&
+          !panel.contains(target)
+        );
       }
 
       function describeElement(target) {
         const id = target.id ? `#${target.id}` : "";
-        const classes = [...target.classList].slice(0, 3).map((name) => `.${name}`).join("");
+        const classes = [...target.classList]
+          .slice(0, 3)
+          .map((name) => `.${name}`)
+          .join("");
         return `${target.tagName.toLowerCase()}${id}${classes}`;
       }
 
@@ -332,9 +374,12 @@
   }
 
   function copyPageStyles(targetDocument) {
-    for (const node of document.querySelectorAll('link[rel~="stylesheet"], style')) {
+    for (const node of document.querySelectorAll(
+      'link[rel~="stylesheet"], style',
+    )) {
       const clone = node.cloneNode(true);
-      if (clone.href) clone.href = new URL(clone.getAttribute("href"), document.baseURI).href;
+      if (clone.href)
+        clone.href = new URL(clone.getAttribute("href"), document.baseURI).href;
       targetDocument.head.append(clone);
     }
   }
@@ -396,7 +441,9 @@
 
   function renderPlayer(pip, video, css, settings, adapter, cleanup) {
     pip.document.head.appendChild(
-      el(pip.document, "style", { textContent: `${css}\n${adapter.styles ?? ""}` }),
+      el(pip.document, "style", {
+        textContent: `${css}\n${adapter.styles ?? ""}`,
+      }),
     );
     pip.document.documentElement.style.setProperty(
       "--floatly-accent",
@@ -495,7 +542,8 @@
     });
     progress.addEventListener("input", () => {
       const duration = getDuration(context, adapter);
-      if (Number.isFinite(duration)) seekTo(context, (progress.valueAsNumber / 1000) * duration, adapter);
+      if (Number.isFinite(duration))
+        seekTo(context, (progress.valueAsNumber / 1000) * duration, adapter);
     });
     volume.addEventListener("input", () => {
       video.volume = volume.valueAsNumber / 100;
@@ -595,14 +643,20 @@
 
     context.video.currentTime = Math.max(
       0,
-      Math.min(getDuration(context, adapter) || Infinity, context.video.currentTime + seconds),
+      Math.min(
+        getDuration(context, adapter) || Infinity,
+        context.video.currentTime + seconds,
+      ),
     );
   }
 
   function seekTo(context, seconds, adapter) {
     if (adapter.seekTo?.(context, seconds)) return;
 
-    context.video.currentTime = Math.max(0, Math.min(getDuration(context, adapter) || Infinity, seconds));
+    context.video.currentTime = Math.max(
+      0,
+      Math.min(getDuration(context, adapter) || Infinity, seconds),
+    );
   }
 
   function getDuration(context, adapter) {
@@ -658,7 +712,8 @@
     const hours = Math.floor(safeSeconds / 3600);
     const minutes = Math.floor((safeSeconds % 3600) / 60);
     const remainder = String(safeSeconds % 60).padStart(2, "0");
-    if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${remainder}`;
+    if (hours > 0)
+      return `${hours}:${String(minutes).padStart(2, "0")}:${remainder}`;
     return `${minutes}:${remainder}`;
   }
 

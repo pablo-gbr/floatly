@@ -34,6 +34,10 @@
     "scripting",
     "storage"
   ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://youtube.com/*"
+  ],
   "options_ui": {
     "page": "src/options.html",
     "open_in_tab": true

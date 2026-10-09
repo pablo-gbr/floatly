@@ -4,6 +4,13 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   try {
     const adapterIds = await loadAdapterIds();
+    if (isYouTubeUrl(tab.url)) {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["src/adapters/youtube/quality-bridge.js"],
+        world: "MAIN"
+      });
+    }
 
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -22,6 +29,15 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 function isRestrictedUrl(url = "") {
   return /^(chrome|chrome-extension|edge|about|devtools):/i.test(url);
+}
+
+function isYouTubeUrl(url = "") {
+  try {
+    const { hostname } = new URL(url);
+    return hostname === "youtube.com" || hostname.endsWith(".youtube.com");
+  } catch {
+    return false;
+  }
 }
 
 function isExpectedInjectionFailure(error) {
