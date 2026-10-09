@@ -76,6 +76,7 @@ body:hover .floatly-controls,
 .floatly-row {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
   width: 100%;
@@ -101,6 +102,38 @@ body:hover .floatly-controls,
   outline: none;
 }
 
+.floatly-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.floatly-live {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 48px;
+  flex-basis: 48px;
+  font-size: 11px;
+}
+
+.floatly-live[hidden] {
+  display: none;
+}
+
+.floatly-live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef5350;
+  opacity: 0.5;
+}
+
+.floatly-live[data-at-live="true"]::before {
+  opacity: 1;
+}
+
 .floatly-range {
   --floatly-fill: 0%;
   height: 3px;
@@ -121,6 +154,10 @@ body:hover .floatly-controls,
 
 .floatly-progress {
   width: 100%;
+  background:
+    linear-gradient(to right, var(--floatly-accent) var(--floatly-fill), transparent var(--floatly-fill)),
+    var(--floatly-buffered, linear-gradient(transparent, transparent)),
+    linear-gradient(rgb(127 127 127 / 0.35), rgb(127 127 127 / 0.35));
 }
 
 .floatly-volume {

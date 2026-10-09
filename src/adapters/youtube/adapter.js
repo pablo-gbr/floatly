@@ -14,6 +14,32 @@
     getRestoreParent() {
       return document.querySelector(".html5-video-container");
     },
+    getPlaybackRange({ video }) {
+      const player = document.querySelector("#movie_player");
+      const state = player?.getProgressState?.();
+      const live = !video.ended && (state?.isAtLiveHead === true
+        || player?.getVideoData?.()?.isLive === true || player?.classList.contains("ytp-live") === true);
+      if (!live) return null;
+      if (!Number.isFinite(state?.offset) || !Number.isFinite(state.seekableStart)
+          || !Number.isFinite(state.seekableEnd)) return { live, start: 0, end: null, canSeek: false };
+      // YouTube DVR bounds use player time; currentTime and buffered use media time.
+      return { live, start: state.seekableStart - state.offset, end: state.seekableEnd - state.offset,
+        atLive: state.isAtLiveHead, canSeek: state.allowSeeking === true };
+    },
+    seekBy(context, seconds) {
+      return this.seekTo(context, context.video.currentTime + seconds);
+    },
+    seekTo(context, seconds) {
+      const range = this.getPlaybackRange(context);
+      if (!range?.live) return false;
+      const player = document.querySelector("#movie_player");
+      const state = player?.getProgressState?.();
+      if (!range.canSeek || !Number.isFinite(range.end) || !Number.isFinite(state?.offset)
+          || typeof player.seekTo !== "function") return true;
+      const target = Math.max(range.start, Math.min(range.end, seconds));
+      player.seekTo(target + state.offset, true);
+      return true;
+    },
     afterRestore({ video }) {
       video.dispatchEvent(new Event("resize"));
       window.dispatchEvent(new Event("resize"));
@@ -108,22 +134,37 @@
       button.setAttribute("aria-expanded", "false");
     }
 
+    function readQuality() {
+      // ponytail: YouTube's private API can change; update this hook if it disappears.
+      const player = document.querySelector("#movie_player");
+      if (typeof player?.getAvailableQualityLevels !== "function"
+          || typeof player.getPlaybackQuality !== "function"
+          || typeof player.setPlaybackQualityRange !== "function") {
+        throw new Error("Quality selection is unavailable for this player.");
+      }
+      const available = player.getAvailableQualityLevels();
+      const levels = Array.isArray(available)
+        ? [...new Set(available.filter((level) => typeof level === "string" && level && level !== "auto"))] : [];
+      if (!levels.length) throw new Error("Quality options are not available yet.");
+      return { levels: [...levels, "auto"], current: player.getPlaybackQuality() };
+    }
+
+    function refreshAvailability() {
+      try {
+        readQuality();
+        button.disabled = false;
+        button.title = button.ariaLabel = "Quality";
+      } catch (error) {
+        closeMenu();
+        button.disabled = true;
+        button.title = button.ariaLabel = error.message;
+      }
+    }
+
     button.addEventListener("click", () => {
       if (!menu.hidden) return closeMenu();
       try {
-        // ponytail: YouTube's private API can change; update this hook if it disappears.
-        const player = document.querySelector("#movie_player");
-        if (typeof player?.getAvailableQualityLevels !== "function"
-            || typeof player.getPlaybackQuality !== "function"
-            || typeof player.setPlaybackQualityRange !== "function") {
-          throw new Error("YouTube quality API is unavailable.");
-        }
-        const available = player.getAvailableQualityLevels();
-        if (!Array.isArray(available) || !available.length) {
-          throw new Error("YouTube has no available quality levels yet.");
-        }
-        const levels = [...new Set([...available.filter((level) => typeof level === "string"), "auto"])];
-        const current = player.getPlaybackQuality();
+        const { levels, current } = readQuality();
         menu.replaceChildren(...levels.map((level) => {
           const item = Object.assign(doc.createElement("button"), {
             className: "floatly-speed-option",
@@ -140,7 +181,7 @@
         button.setAttribute("aria-expanded", "true");
         menu.firstElementChild?.focus();
       } catch (error) {
-        closeMenu();
+        refreshAvailability();
         console.warn("Floatly could not read YouTube quality levels.", error);
       }
     }, options);
@@ -184,7 +225,18 @@
       }
     }, options);
     context.video.addEventListener("loadedmetadata", closeMenu, options);
+    for (const name of ["loadedmetadata", "loadeddata", "durationchange", "emptied", "playing"]) {
+      context.video.addEventListener(name, refreshAvailability, options);
+    }
+    context.video.addEventListener("progress", () => {
+      if (button.disabled) refreshAvailability();
+    }, options);
+    doc.addEventListener("pointerover", (event) => {
+      if (button.contains(event.target)) refreshAvailability();
+    }, options);
+    doc.addEventListener("focusin", refreshAvailability, options);
     context.row.append(button, menu);
+    refreshAvailability();
   }
 
   function qualityLabel(level) {

@@ -490,6 +490,10 @@
     });
     const fit = button(pip.document, "Crop / fit video", icons.crop);
     const next = button(pip.document, "Next video", icons.next);
+    const live = el(pip.document, "button", {
+      className: "floatly-button floatly-live", type: "button", textContent: "Live",
+      title: "Jump to live", ariaLabel: "Jump to live", hidden: true,
+    });
     const time = el(pip.document, "span", {
       className: "floatly-time",
       textContent: "0:00",
@@ -521,6 +525,7 @@
     appendIf(row, controlsConfig.volume, volume);
     appendIf(row, controlsConfig.fit, fit);
     appendIf(row, controlsConfig.time, time);
+    row.append(live);
     appendIf(controls, controlsConfig.progress, progress);
     controls.append(row);
     shell.append(video, controls);
@@ -554,8 +559,16 @@
       );
     }, listenerOptions);
     progress.addEventListener("input", () => {
-      const duration = getDuration(context, adapter);
-      if (Number.isFinite(duration)) seekTo(context, (progress.valueAsNumber / 1000) * duration, adapter);
+      const range = getPlaybackRange(context, adapter);
+      if (range.end > range.start && range.canSeek !== false) {
+        seekTo(context, range.start + (progress.valueAsNumber / 1000) * (range.end - range.start), adapter);
+      }
+    }, listenerOptions);
+    live.addEventListener("click", () => {
+      const range = getPlaybackRange(context, adapter);
+      if (!range.live || !(range.end > range.start) || range.canSeek === false) return;
+      seekTo(context, Math.max(range.start, range.end - 0.1), adapter);
+      video.play().catch((error) => console.error("Floatly could not resume the live stream.", error));
     }, listenerOptions);
     volume.addEventListener("input", () => {
       video.volume = volume.valueAsNumber / 100;
@@ -577,15 +590,35 @@
         video.muted || video.volume === 0 ? icons.muted : icons.volume);
       volume.value = String(video.muted ? 0 : Math.round(video.volume * 100));
       setRangeFill(volume, video.muted ? 0 : video.volume * 100);
-      const duration = getDuration(context, adapter);
-      progress.disabled = !Number.isFinite(duration);
-      if (Number.isFinite(duration)) {
-        progress.value = String(
-          Math.round((video.currentTime / duration) * 1000),
-        );
-        setRangeFill(progress, progress.valueAsNumber / 10);
+      const range = getPlaybackRange(context, adapter);
+      const seekable = Number.isFinite(range.end) && range.end > range.start && range.canSeek !== false;
+      progress.disabled = !seekable;
+      rewind.disabled = forward.disabled = range.live && !seekable;
+      progress.value = seekable ? String(Math.round(Math.max(0, Math.min(1,
+        (video.currentTime - range.start) / (range.end - range.start))) * 1000)) : "0";
+      setRangeFill(progress, progress.valueAsNumber / 10);
+      const bufferLayers = [];
+      const buffered = video.buffered;
+      if (seekable) {
+        for (let index = 0; index < buffered.length; index++) {
+          const start = Math.max(range.start, buffered.start(index));
+          const end = Math.min(range.end, buffered.end(index));
+          if (end <= start) continue;
+          const left = (start - range.start) / (range.end - range.start) * 100;
+          const right = (end - range.start) / (range.end - range.start) * 100;
+          bufferLayers.push(`linear-gradient(to right, transparent ${left}%, rgb(255 255 255 / 0.55) ${left}% ${right}%, transparent ${right}%)`);
+        }
       }
-      time.textContent = `${formatTime(video.currentTime)}${Number.isFinite(duration) ? ` / ${formatTime(duration)}` : ""}`;
+      progress.style.setProperty("--floatly-buffered", bufferLayers.join(",") || "linear-gradient(transparent, transparent)");
+      live.hidden = !range.live;
+      live.disabled = !seekable;
+      // ponytail: generic streams use a 3-second edge tolerance; site adapters can report atLive directly.
+      const atLive = range.live && !video.paused && (range.atLive ?? (seekable && range.end - video.currentTime <= 3));
+      live.dataset.atLive = String(atLive);
+      live.title = live.ariaLabel = !seekable ? "Live stream is not seekable" : atLive ? "At live edge" : "Jump to live";
+      time.textContent = range.live
+        ? seekable && !atLive ? `-${formatTime(Math.max(0, range.end - video.currentTime))}` : ""
+        : `${formatTime(video.currentTime)}${Number.isFinite(range.end) ? ` / ${formatTime(range.end)}` : ""}`;
       markCurrentRate(speedMenu, video.playbackRate);
     };
 
@@ -597,6 +630,10 @@
       "durationchange",
       "ratechange",
       "loadedmetadata",
+      "progress",
+      "seeking",
+      "seeked",
+      "emptied",
     ].forEach((name) => {
       video.addEventListener(name, sync, listenerOptions);
     });
@@ -660,6 +697,7 @@
 
   function seekBy(context, seconds, adapter) {
     if (adapter.seekBy?.(context, seconds)) return;
+    if (getPlaybackRange(context, adapter).live) return seekTo(context, context.video.currentTime + seconds, adapter);
 
     context.video.currentTime = Math.max(
       0,
@@ -668,9 +706,28 @@
   }
 
   function seekTo(context, seconds, adapter) {
+    if (!Number.isFinite(seconds)) return;
     if (adapter.seekTo?.(context, seconds)) return;
 
-    context.video.currentTime = Math.max(0, Math.min(getDuration(context, adapter) || Infinity, seconds));
+    const range = getPlaybackRange(context, adapter);
+    if (range.live && (!(range.end > range.start) || range.canSeek === false)) return;
+    context.video.currentTime = Math.max(range.start, Math.min(range.end ?? Infinity, seconds));
+  }
+
+  function getPlaybackRange(context, adapter) {
+    const custom = adapter.getPlaybackRange?.(context);
+    if (custom?.live) {
+      return Number.isFinite(custom.start) && Number.isFinite(custom.end) && custom.end >= custom.start
+        ? custom : { live: true, start: 0, end: null, canSeek: false };
+    }
+    const duration = getDuration(context, adapter);
+    const live = !context.video.ended && duration === Infinity;
+    const ranges = context.video.seekable;
+    if (live && ranges.length) {
+      const last = ranges.length - 1;
+      return { live, start: ranges.start(last), end: ranges.end(last) };
+    }
+    return { live, start: 0, end: Number.isFinite(duration) ? duration : null };
   }
 
   function getDuration(context, adapter) {
@@ -717,6 +774,7 @@
   }
 
   function handleKeys(event, context, shortcuts, adapter) {
+    if (event.defaultPrevented || event.target.closest?.("button, input, select, textarea, [contenteditable]")) return;
     if (event.key === shortcuts.playPause) {
       context.video.paused ? context.video.play() : context.video.pause();
     } else if (event.key === shortcuts.rewind) {
