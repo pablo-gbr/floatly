@@ -152,6 +152,8 @@ body:hover .floatly-controls,
 .floatly-quality-menu {
   right: 0;
   left: auto;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
 }
 
 .floatly-speed-option {
