@@ -46,6 +46,7 @@
       host: video.parentElement,
       nextSibling: video.nextSibling,
       marker: document.createComment("floatly-video-placeholder"),
+      getParent: adapter.getRestoreParent,
     };
     restore.host?.insertBefore(restore.marker, restore.nextSibling);
     let pip;
@@ -67,9 +68,8 @@
       "pagehide",
       () => {
         try {
-          adapter.onExit?.(context);
-          while (cleanup.length) cleanup.pop()?.();
           restoreNode(video, restore);
+          runCleanup([...cleanup, () => adapter.onExit?.(context)]);
         } finally {
           state.pip = null;
         }
@@ -124,14 +124,30 @@
   }
 
   function restoreNode(node, restore) {
-    const parent = restore.marker.parentNode ?? restore.host;
+    const markerParent = restore.marker.parentNode;
+    const liveParent = restore.getParent?.();
+    const parent = markerParent
+      ?? (liveParent?.isConnected ? liveParent : null)
+      ?? (restore.host?.isConnected ? restore.host : null)
+      ?? liveParent
+      ?? restore.host;
 
-    parent?.insertBefore(node, restore.marker.parentNode ? restore.marker : null);
+    parent?.insertBefore(node, markerParent ? restore.marker : null);
     restore.marker.remove();
     node.className = restore.className;
     restore.style === null
       ? node.removeAttribute("style")
       : node.setAttribute("style", restore.style);
+  }
+
+  function runCleanup(cleanup) {
+    while (cleanup.length) {
+      try {
+        cleanup.pop()?.();
+      } catch (error) {
+        console.debug("Floatly cleanup failed.", error);
+      }
+    }
   }
 
   function pickElement() {

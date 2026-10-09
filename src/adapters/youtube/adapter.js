@@ -11,6 +11,9 @@
         ?? document.querySelector("#movie_player video")
         ?? document.querySelector("video");
     },
+    getRestoreParent() {
+      return document.querySelector(".html5-video-container");
+    },
     styles: `
       .ytp-caption-window-container {
         width: 100%;
@@ -64,6 +67,9 @@
     const parent = element.parentElement;
     const nextSibling = element.nextSibling;
     context.shell.append(element);
-    context.addCleanup(() => parent?.insertBefore(element, nextSibling));
+    context.addCleanup(() => parent?.insertBefore(
+      element,
+      nextSibling?.parentNode === parent ? nextSibling : null,
+    ));
   }
 })();
