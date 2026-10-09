@@ -26,8 +26,8 @@
 
       const parent = captions.parentElement;
       const nextSibling = captions.nextSibling;
+      context.addCleanup(() => parent?.insertBefore(captions, nextSibling?.parentNode === parent ? nextSibling : null));
       context.shell.append(captions);
-      context.addCleanup(() => parent?.insertBefore(captions, nextSibling));
     }
   });
 })();

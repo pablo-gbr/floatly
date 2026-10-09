@@ -14,6 +14,10 @@
     getRestoreParent() {
       return document.querySelector(".html5-video-container");
     },
+    afterRestore({ video }) {
+      video.dispatchEvent(new Event("resize"));
+      window.dispatchEvent(new Event("resize"));
+    },
     styles: `
       .ytp-caption-window-container {
         width: 100%;
@@ -66,10 +70,11 @@
 
     const parent = element.parentElement;
     const nextSibling = element.nextSibling;
-    context.shell.append(element);
     context.addCleanup(() => parent?.insertBefore(
       element,
       nextSibling?.parentNode === parent ? nextSibling : null,
     ));
+    context.shell.append(element);
   }
+
 })();

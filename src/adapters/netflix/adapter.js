@@ -25,8 +25,8 @@
 
     const parent = element.parentElement;
     const nextSibling = element.nextSibling;
+    context.addCleanup(() => parent?.insertBefore(element, nextSibling?.parentNode === parent ? nextSibling : null));
     context.shell.append(element);
-    context.addCleanup(() => parent?.insertBefore(element, nextSibling));
   }
 
   function seekNetflix(seconds) {
@@ -38,7 +38,8 @@
 
       player.seek(Math.max(0, Math.floor(seconds * 1000)));
       return true;
-    } catch {
+    } catch (error) {
+      console.error("Floatly Netflix seek failed; using HTML5 fallback.", error);
       return false;
     }
   }

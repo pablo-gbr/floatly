@@ -38,7 +38,7 @@
 
     const parent = element.parentElement;
     const nextSibling = element.nextSibling;
+    context.addCleanup(() => parent?.insertBefore(element, nextSibling?.parentNode === parent ? nextSibling : null));
     context.shell.append(element);
-    context.addCleanup(() => parent?.insertBefore(element, nextSibling));
   }
 })();

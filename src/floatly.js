@@ -25,8 +25,16 @@
     },
   };
 
-  if ("documentPictureInPicture" in window && documentPictureInPicture.window) {
-    documentPictureInPicture.window.close();
+  const bootstrap = window.__floatlyBootstrap;
+  delete window.__floatlyBootstrap;
+  const pendingPiP = state.pendingPiP;
+  state.pendingPiP = null;
+  state.preparing = false;
+
+  if (state.opening) return;
+  if (state.restore) {
+    const pip = state.pip;
+    if (state.restore()) pip?.close();
     return;
   }
 
@@ -35,47 +43,64 @@
       return;
     }
 
-    const adapter = window.FloatlyAdapters?.match() ?? {};
-    const video = findVideo(adapter);
-    const [css, settings] = await Promise.all([loadCss(), loadSettings()]);
-    if (!video) return openSelectedElementPiP(css);
-
-    const restore = {
-      className: video.className,
-      style: video.getAttribute("style"),
-      host: video.parentElement,
-      nextSibling: video.nextSibling,
-      marker: document.createComment("floatly-video-placeholder"),
-      getParent: adapter.getRestoreParent,
-    };
-    restore.host?.insertBefore(restore.marker, restore.nextSibling);
-    let pip;
+    if (!bootstrap || typeof bootstrap.css !== "string") {
+      throw new Error("Floatly isolated bootstrap is missing.");
+    }
+    const { css } = bootstrap;
+    const settings = mergeSettings(bootstrap.settings);
+    let adapter;
+    let video;
     try {
-      pip = await documentPictureInPicture.requestWindow(
-        getWindowSize(video, settings),
-      );
+      adapter = window.FloatlyAdapters?.match() ?? {};
+      video = findVideo(adapter);
+      if (video && !(video instanceof HTMLVideoElement)) {
+        throw new TypeError("Adapter must return the original HTMLVideoElement.");
+      }
     } catch (error) {
-      restore.marker.remove();
+      console.error("Floatly adapter detection failed.", error);
       throw error;
     }
+    if (!video) {
+      pendingPiP?.close();
+      return openSelectedElementPiP(css);
+    }
+
     const cleanup = [];
-
-    state.pip = pip;
-    const context = renderPlayer(pip, video, css, settings, adapter, cleanup);
-    adapter.onEnter?.(context);
-
-    pip.addEventListener(
-      "pagehide",
-      () => {
-        try {
-          restoreNode(video, restore);
-          runCleanup([...cleanup, () => adapter.onExit?.(context)]);
-        } finally {
-          state.pip = null;
-        }
-      },
-      { once: true },
-    );
+    let context;
+    const restorePiP = prepareRestoration(video, adapter, cleanup, () => context);
+    let pip;
+    let stage = "opening PiP";
+    state.opening = true;
+    try {
+      logVideo("before relocation", video, null);
+      if (pendingPiP?.closed) throw new Error("PiP was closed before player setup completed.");
+      pip = pendingPiP ?? await documentPictureInPicture.requestWindow(getWindowSize(video, settings));
+      state.pip = pip;
+      registerLifecycle(pip, restorePiP, cleanup);
+      stage = "rendering player / relocating video";
+      context = renderPlayer(pip, video, css, settings, adapter, cleanup);
+      if (!video.isConnected || video.ownerDocument !== pip.document
+          || context.shell.querySelector("video") !== video) {
+        throw new Error("Original video was not connected to the PiP document.");
+      }
+      logVideo("after relocation and resize", video, pip);
+      stage = `entering adapter ${adapter.id ?? "generic"}`;
+      cleanup.push(() => adapter.onExit?.(context));
+      await adapter.onEnter?.(context);
+      if (state.restore !== restorePiP) return;
+      logVideo("after adapter setup", video, pip);
+      const startTime = video.currentTime;
+      const timer = window.setTimeout(() => {
+        logVideo("playback sample", video, pip, video.currentTime - startTime);
+      }, 1000);
+      cleanup.push(() => window.clearTimeout(timer));
+    } catch (error) {
+      console.error(`Floatly failed while ${stage}.`, error);
+      if (restorePiP()) pip?.close();
+      throw error;
+    } finally {
+      state.opening = false;
+    }
   }
 
   async function openSelectedElementPiP(css) {
@@ -83,61 +108,98 @@
     if (!target) return;
 
     const rect = target.getBoundingClientRect();
-    const restore = {
-      className: target.className,
-      style: target.getAttribute("style"),
-      host: target.parentElement,
-      nextSibling: target.nextSibling,
-      marker: document.createComment("floatly-element-placeholder"),
-    };
-    restore.host?.insertBefore(restore.marker, restore.nextSibling);
+    const cleanup = [];
+    const restorePiP = prepareRestoration(target, {}, cleanup);
     let pip;
+    state.opening = true;
     try {
       pip = await documentPictureInPicture.requestWindow({
         width: Math.max(360, Math.min(900, Math.round(rect.width || 640))),
         height: Math.max(240, Math.min(700, Math.round(rect.height || 420))),
       });
+      state.pip = pip;
+      registerLifecycle(pip, restorePiP, cleanup);
+      const shell = el(pip.document, "main", { className: "floatly-shell floatly-element-shell" });
+      copyPageStyles(pip.document);
+      pip.document.head.appendChild(el(pip.document, "style", { textContent: css }));
+      target.classList.add("floatly-selected-element");
+      shell.append(target);
+      pip.document.body.append(shell);
     } catch (error) {
-      restore.marker.remove();
+      if (restorePiP()) pip?.close();
       throw error;
+    } finally {
+      state.opening = false;
     }
-    const shell = el(pip.document, "main", { className: "floatly-shell floatly-element-shell" });
+  }
 
-    copyPageStyles(pip.document);
-    pip.document.head.appendChild(el(pip.document, "style", { textContent: css }));
-    target.classList.add("floatly-selected-element");
-    shell.append(target);
-    pip.document.body.append(shell);
-    state.pip = pip;
+  function prepareRestoration(node, adapter, cleanup, getContext = () => null) {
+    const restore = {
+      className: node.className,
+      style: node.getAttribute("style"),
+      host: node.parentElement,
+      nextSibling: node.nextSibling,
+      marker: document.createComment("floatly-placeholder"),
+      getParent: () => adapter.getRestoreParent?.(),
+    };
+    if (!restore.host?.isConnected) throw new Error("Original node has no connected parent.");
+    restore.host.insertBefore(restore.marker, node);
+    let restored = false;
+    let restoring = false;
+    const restorePiP = () => {
+      if (restored) return true;
+      if (restoring) return false;
+      restoring = true;
+      try {
+        restoreNode(node, restore);
+        restored = true;
+      } catch (error) {
+        console.error("Floatly restoration failed; recovery is retained for retry.", error);
+      } finally {
+        runCleanup(cleanup);
+        runCleanup([() => document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: { command: "dispose" } }))]);
+        restoring = false;
+      }
+      if (!restored) return false;
+      runCleanup([() => adapter.afterRestore?.(getContext() ?? { video: node }), () => window.focus()]);
+      state.pip = null;
+      if (state.restore === restorePiP) state.restore = null;
+      return true;
+    };
+    state.restore = restorePiP;
+    return restorePiP;
+  }
 
-    pip.addEventListener(
-      "pagehide",
-      () => {
-        try {
-          restoreNode(target, restore);
-        } finally {
-          state.pip = null;
-        }
-      },
-      { once: true },
-    );
+  function registerLifecycle(pip, restorePiP, cleanup) {
+    for (const name of ["pagehide", "unload"]) {
+      pip.addEventListener(name, restorePiP);
+      cleanup.push(() => pip.removeEventListener(name, restorePiP));
+    }
   }
 
   function restoreNode(node, restore) {
     const markerParent = restore.marker.parentNode;
-    const liveParent = restore.getParent?.();
-    const parent = markerParent
-      ?? (liveParent?.isConnected ? liveParent : null)
-      ?? (restore.host?.isConnected ? restore.host : null)
-      ?? liveParent
-      ?? restore.host;
+    let parent;
+    let before = null;
+    if (markerParent?.isConnected && markerParent.ownerDocument === document) {
+      parent = markerParent;
+      before = restore.marker;
+    } else if (restore.host?.isConnected && restore.host.ownerDocument === document) {
+      parent = restore.host;
+      if (restore.nextSibling?.parentNode === parent) before = restore.nextSibling;
+    } else {
+      parent = restore.getParent?.();
+    }
+    if (!parent?.isConnected || parent.ownerDocument !== document) {
+      throw new Error("No connected restoration container in the original document.");
+    }
 
-    parent?.insertBefore(node, markerParent ? restore.marker : null);
-    restore.marker.remove();
+    parent.insertBefore(node, before);
     node.className = restore.className;
     restore.style === null
       ? node.removeAttribute("style")
       : node.setAttribute("style", restore.style);
+    restore.marker.remove();
   }
 
   function runCleanup(cleanup) {
@@ -145,7 +207,7 @@
       try {
         cleanup.pop()?.();
       } catch (error) {
-        console.debug("Floatly cleanup failed.", error);
+        console.error("Floatly cleanup failed.", error);
       }
     }
   }
@@ -355,19 +417,6 @@
     return box.width * box.height;
   }
 
-  async function loadCss() {
-    const response = await fetch(chrome.runtime.getURL("src/floatly.css"));
-    if (!response.ok) throw new Error("Could not load Floatly styles.");
-    return response.text();
-  }
-
-  async function loadSettings() {
-    const stored = await chrome.storage.sync.get({
-      floatlySettings: defaultSettings,
-    });
-    return mergeSettings(stored.floatlySettings);
-  }
-
   function mergeSettings(settings) {
     return {
       ...defaultSettings,
@@ -395,6 +444,13 @@
   }
 
   function renderPlayer(pip, video, css, settings, adapter, cleanup) {
+    const events = new AbortController();
+    const listenerOptions = { signal: events.signal };
+    let disposed = false;
+    cleanup.push(() => {
+      disposed = true;
+      events.abort();
+    });
     pip.document.head.appendChild(
       el(pip.document, "style", { textContent: `${css}\n${adapter.styles ?? ""}` }),
     );
@@ -418,7 +474,7 @@
     const rewind = button(pip.document, "Rewind 10 seconds", icons.rewind);
     const forward = button(pip.document, "Forward 10 seconds", icons.forward);
     const speed = button(pip.document, "Playback speed", icons.speed);
-    const speedMenu = speedSelector(pip.document, video, settings.speedSteps);
+    const speedMenu = speedSelector(pip.document, video, settings.speedSteps, listenerOptions);
     const mute = button(
       pip.document,
       "Mute / unmute",
@@ -450,7 +506,8 @@
       row,
       progress,
       addCleanup(fn) {
-        cleanup.push(fn);
+        if (disposed) runCleanup([fn]);
+        else cleanup.push(fn);
       },
     };
 
@@ -468,51 +525,56 @@
     controls.append(row);
     shell.append(video, controls);
     pip.document.body.append(shell);
+    logVideo("relocated before resize / adapter", video, pip);
+    resizeVideoToWindow(pip, video);
 
     if (settings.clickVideoToTogglePlayback) {
       shell.addEventListener("click", (event) => {
         if (controls.contains(event.target)) return;
         video.paused ? video.play() : video.pause();
-      });
+      }, listenerOptions);
     }
 
     play.addEventListener("click", () =>
       video.paused ? video.play() : video.pause(),
+      listenerOptions,
     );
-    rewind.addEventListener("click", () => seekBy(context, -10, adapter));
-    forward.addEventListener("click", () => seekBy(context, 10, adapter));
-    speed.addEventListener("click", () => speedMenu.toggleAttribute("hidden"));
-    next.addEventListener("click", () => adapter.nextVideo?.(context));
+    rewind.addEventListener("click", () => seekBy(context, -10, adapter), listenerOptions);
+    forward.addEventListener("click", () => seekBy(context, 10, adapter), listenerOptions);
+    speed.addEventListener("click", () => speedMenu.toggleAttribute("hidden"), listenerOptions);
+    next.addEventListener("click", () => adapter.nextVideo?.(context), listenerOptions);
     mute.addEventListener("click", () => {
       video.muted = !video.muted;
-    });
+    }, listenerOptions);
     fit.addEventListener("click", () => {
       video.classList.toggle("floatly-video-fill");
       fit.setAttribute(
         "aria-pressed",
         String(video.classList.contains("floatly-video-fill")),
       );
-    });
+    }, listenerOptions);
     progress.addEventListener("input", () => {
       const duration = getDuration(context, adapter);
       if (Number.isFinite(duration)) seekTo(context, (progress.valueAsNumber / 1000) * duration, adapter);
-    });
+    }, listenerOptions);
     volume.addEventListener("input", () => {
       video.volume = volume.valueAsNumber / 100;
       video.muted = video.volume === 0;
-    });
+    }, listenerOptions);
     pip.addEventListener("keydown", (event) =>
       handleKeys(event, context, settings.shortcuts, adapter),
+      listenerOptions,
     );
     pip.addEventListener("resize", () => {
       resizeVideoToWindow(pip, video);
       saveWindowSize(pip, settings);
-    });
+    }, listenerOptions);
+    video.addEventListener("loadedmetadata", () => resizeVideoToWindow(pip, video), listenerOptions);
 
     const sync = () => {
-      play.innerHTML = video.paused ? icons.play : icons.pause;
-      mute.innerHTML =
-        video.muted || video.volume === 0 ? icons.muted : icons.volume;
+      play.querySelector("path").setAttribute("d", video.paused ? icons.play : icons.pause);
+      mute.querySelector("path").setAttribute("d",
+        video.muted || video.volume === 0 ? icons.muted : icons.volume);
       volume.value = String(video.muted ? 0 : Math.round(video.volume * 100));
       setRangeFill(volume, video.muted ? 0 : video.volume * 100);
       const duration = getDuration(context, adapter);
@@ -525,7 +587,6 @@
       }
       time.textContent = `${formatTime(video.currentTime)}${Number.isFinite(duration) ? ` / ${formatTime(duration)}` : ""}`;
       markCurrentRate(speedMenu, video.playbackRate);
-      resizeVideoToWindow(pip, video);
     };
 
     [
@@ -537,7 +598,7 @@
       "ratechange",
       "loadedmetadata",
     ].forEach((name) => {
-      video.addEventListener(name, sync);
+      video.addEventListener(name, sync, listenerOptions);
     });
     sync();
     return context;
@@ -550,7 +611,14 @@
       title,
       ariaLabel: title,
     });
-    element.innerHTML = icon;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    for (const [name, value] of Object.entries({
+      width: "16", height: "16", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true",
+    })) svg.setAttribute(name, value);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", icon);
+    svg.append(path);
+    element.append(svg);
     return element;
   }
 
@@ -558,7 +626,7 @@
     if (shouldAppend) parent.append(child);
   }
 
-  function speedSelector(document, video, speedSteps) {
+  function speedSelector(document, video, speedSteps, listenerOptions) {
     const menu = el(document, "div", {
       className: "floatly-speed-menu",
       hidden: true,
@@ -574,7 +642,7 @@
       item.addEventListener("click", () => {
         video.playbackRate = rate;
         menu.hidden = true;
-      });
+      }, listenerOptions);
       menu.append(item);
     }
 
@@ -610,8 +678,27 @@
   }
 
   function resizeVideoToWindow(pip, video) {
-    video.style.width = `${pip.innerWidth}px`;
-    video.style.height = `${pip.innerHeight}px`;
+    const width = `${pip.innerWidth}px`;
+    const height = `${pip.innerHeight}px`;
+    if (video.style.width !== width) video.style.width = width;
+    if (video.style.height !== height) video.style.height = height;
+  }
+
+  function logVideo(stage, video, pip, advancedBy = null) {
+    const rect = video.getBoundingClientRect();
+    console.debug(`Floatly media: ${stage}`, {
+      connected: video.isConnected,
+      inPiP: Boolean(pip && video.ownerDocument === pip.document),
+      width: rect.width,
+      height: rect.height,
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      readyState: video.readyState,
+      paused: video.paused,
+      currentTime: video.currentTime,
+      advancedBy,
+      encrypted: Boolean(video.mediaKeys),
+    });
   }
 
   function setRangeFill(input, percent) {
@@ -624,15 +711,9 @@
   function saveWindowSize(pip, settings) {
     if (!settings.rememberWindowSize) return;
 
-    chrome.storage.sync.set({
-      floatlySettings: {
-        ...settings,
-        windowSize: {
-          width: pip.innerWidth,
-          height: pip.innerHeight,
-        },
-      },
-    });
+    document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, {
+      detail: { command: "saveWindowSize", width: pip.innerWidth, height: pip.innerHeight },
+    }));
   }
 
   function handleKeys(event, context, shortcuts, adapter) {
@@ -666,19 +747,22 @@
     return Object.assign(document.createElement(tag), props);
   }
 
-  const iconAttrs =
-    'width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"';
   const icons = {
-    play: `<svg ${iconAttrs}><path d="M8 5v14l11-7z"/></svg>`,
-    pause: `<svg ${iconAttrs}><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>`,
-    rewind: `<svg ${iconAttrs}><path d="M11 18V6l-8.5 6zm1.5-6 8.5 6V6z"/></svg>`,
-    forward: `<svg ${iconAttrs}><path d="M13 6v12l8.5-6zM2.5 18 11 12 2.5 6z"/></svg>`,
-    next: `<svg ${iconAttrs}><path d="M6 18l8.5-6L6 6zm10-12h2v12h-2z"/></svg>`,
-    speed: `<svg ${iconAttrs}><path d="M12 4a10 10 0 0 0-8.66 15h17.32A10 10 0 0 0 12 4m0 2a8 8 0 0 1 7.45 11H4.55A8 8 0 0 1 12 6m1 7.59 3.54-3.55 1.42 1.42L13 16.41l-3.54-3.53 1.42-1.42z"/></svg>`,
-    volume: `<svg ${iconAttrs}><path d="M4 9v6h4l5 4V5L8 9zm11.5-.5v7a4 4 0 0 0 0-7m0-3.5v2.1a6 6 0 0 1 0 9.8V19a8 8 0 0 0 0-14"/></svg>`,
-    muted: `<svg ${iconAttrs}><path d="M4 9v6h4l5 4V5L8 9zm13.59 3-2.3-2.29 1.42-1.42L19 10.59l2.29-2.3 1.42 1.42L20.41 12l2.3 2.29-1.42 1.42L19 13.41l-2.29 2.3-1.42-1.42z"/></svg>`,
-    crop: `<svg ${iconAttrs}><path d="M7 3h2v4h8v8h4v2h-4v4h-2v-4H7V9H3V7h4zm2 6v6h6V9z"/></svg>`,
+    play: "M8 5v14l11-7z",
+    pause: "M7 5h4v14H7zm6 0h4v14h-4z",
+    rewind: "M11 18V6l-8.5 6zm1.5-6 8.5 6V6z",
+    forward: "M13 6v12l8.5-6zM2.5 18 11 12 2.5 6z",
+    next: "M6 18l8.5-6L6 6zm10-12h2v12h-2z",
+    speed: "M12 4a10 10 0 0 0-8.66 15h17.32A10 10 0 0 0 12 4m0 2a8 8 0 0 1 7.45 11H4.55A8 8 0 0 1 12 6m1 7.59 3.54-3.55 1.42 1.42L13 16.41l-3.54-3.53 1.42-1.42z",
+    volume: "M4 9v6h4l5 4V5L8 9zm11.5-.5v7a4 4 0 0 0 0-7m0-3.5v2.1a6 6 0 0 1 0 9.8V19a8 8 0 0 0 0-14",
+    muted: "M4 9v6h4l5 4V5L8 9zm13.59 3-2.3-2.29 1.42-1.42L19 10.59l2.29-2.3 1.42 1.42L20.41 12l2.3 2.29-1.42 1.42L19 13.41l-2.29 2.3-1.42-1.42z",
+    crop: "M7 3h2v4h8v8h4v2h-4v4h-2v-4H7V9H3V7h4zm2 6v6h6V9z",
   };
 
-  main().catch(() => {});
+  main().catch((error) => {
+    console.error("Floatly initialization failed.", error);
+    const pip = state.pip;
+    if (state.restore?.()) pip?.close();
+    if (!state.restore) pendingPiP?.close();
+  });
 })();
