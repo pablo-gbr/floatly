@@ -23,22 +23,23 @@ const defaultSettings = {
   }
 };
 
+const t = (key) => chrome.i18n.getMessage(key);
 const controlLabels = {
-  progress: "Progress bar",
-  rewind: "Rewind",
-  forward: "Forward",
-  speed: "Speed menu",
-  volume: "Volume slider",
-  fit: "Crop / fit",
-  time: "Time"
+  progress: t("progressBar"),
+  rewind: t("rewind"),
+  forward: t("forward"),
+  speed: t("speedMenu"),
+  volume: t("volumeSlider"),
+  fit: t("cropFit"),
+  time: t("time")
 };
 
 const shortcutLabels = {
-  playPause: "Play / pause",
-  rewind: "Rewind",
-  forward: "Forward",
-  volumeUp: "Volume up",
-  volumeDown: "Volume down"
+  playPause: t("playPause"),
+  rewind: t("rewind"),
+  forward: t("forward"),
+  volumeUp: t("volumeUp"),
+  volumeDown: t("volumeDown")
 };
 
 const colorInput = document.querySelector("#accentColor");
@@ -53,6 +54,11 @@ const reset = document.querySelector("#reset");
 init();
 
 async function init() {
+  document.documentElement.lang = chrome.i18n.getUILanguage();
+  document.documentElement.dir = t("@@bidi_dir");
+  for (const element of document.querySelectorAll("[data-i18n]")) {
+    element.textContent = t(element.dataset.i18n);
+  }
   const settings = await getSettings();
   render(settings);
 }
@@ -185,5 +191,5 @@ function parseSpeedSteps(value) {
 }
 
 function displayKey(key) {
-  return key === " " ? "Space" : key;
+  return key === " " ? t("keySpace") : key;
 }

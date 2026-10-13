@@ -28,6 +28,7 @@
 
   const bootstrap = window.__floatlyBootstrap;
   delete window.__floatlyBootstrap;
+  const t = (key) => bootstrap.messages[key];
   const pendingPiP = state.pendingPiP;
   state.pendingPiP = null;
   state.preparing = false;
@@ -186,6 +187,8 @@
   }
 
   function registerLifecycle(pip, restorePiP, cleanup) {
+    pip.document.documentElement.lang = bootstrap.language;
+    pip.document.documentElement.dir = bootstrap.direction;
     for (const name of ["pagehide", "unload"]) {
       pip.addEventListener(name, restorePiP);
       cleanup.push(() => pip.removeEventListener(name, restorePiP));
@@ -268,17 +271,17 @@
           .note { color: #f6c96b; font-size: 12px; }
         </style>
         <div class="surface"></div><div class="highlight" hidden></div>
-        <section class="panel" role="dialog" aria-label="Floatly element picker">
-          <h2>Float an element</h2>
-          <p class="help">Hover to highlight, then click to select. Escape cancels.</p>
-          <p class="selector" aria-live="polite">No element selected</p>
-          <select aria-label="Selected element and its ancestors" size="4" disabled></select>
+        <section class="panel" role="dialog">
+          <h2 data-i18n="pickerTitle"></h2>
+          <p class="help" data-i18n="pickerHoverHelp"></p>
+          <p class="selector" aria-live="polite" data-i18n="pickerNoSelection"></p>
+          <select size="4" disabled></select>
           <div class="actions">
-            <button class="open" type="button" disabled>Open in PiP</button>
-            <button class="again" type="button" disabled>Pick another</button>
-            <button class="cancel" type="button">Cancel</button>
+            <button class="open" type="button" data-i18n="openInPip" disabled></button>
+            <button class="again" type="button" data-i18n="pickerAgain" disabled></button>
+            <button class="cancel" type="button" data-i18n="cancel"></button>
           </div>
-          <p class="note">Experimental: some site styles and interactions may not carry over.</p>
+          <p class="note" data-i18n="pickerNote"></p>
         </section>`;
       const surface = shadow.querySelector('.surface');
       const overlay = shadow.querySelector('.highlight');
@@ -288,6 +291,14 @@
       const pick = shadow.querySelector('.open');
       const again = shadow.querySelector('.again');
       const cancel = shadow.querySelector('.cancel');
+      for (const element of shadow.querySelectorAll('[data-i18n]')) {
+        element.textContent = t(element.dataset.i18n);
+      }
+      const panel = shadow.querySelector('.panel');
+      panel.lang = bootstrap.language;
+      panel.dir = bootstrap.direction;
+      panel.setAttribute('aria-label', t('pickerLabel'));
+      choices.setAttribute('aria-label', t('pickerAncestors'));
 
       function cleanup(value = null) {
         if (finished) return;
@@ -333,7 +344,7 @@
         pick.disabled = !locked || !valid;
         again.disabled = !locked;
         choices.disabled = !locked || !valid;
-        label.textContent = valid ? describeElement(current) : 'No element selected';
+        label.textContent = valid ? describeElement(current) : t('pickerNoSelection');
         if (!valid) return;
         const rect = current.getBoundingClientRect();
         Object.assign(overlay.style, { left: `${rect.left}px`, top: `${rect.top}px`,
@@ -347,7 +358,7 @@
         setCurrent(targetAt(event));
         if (!current) return;
         locked = true;
-        help.textContent = 'Choose the element or an ancestor. Enter opens PiP; Escape cancels.';
+        help.textContent = t('pickerSelectedHelp');
         drawOverlay();
         pick.focus();
       });
@@ -360,7 +371,7 @@
       });
       again.addEventListener('click', () => {
         locked = false;
-        help.textContent = 'Hover to highlight, then click to select. Escape cancels.';
+        help.textContent = t('pickerHoverHelp');
         setCurrent(null);
       });
       cancel.addEventListener('click', () => cleanup());
@@ -476,17 +487,17 @@
       min: "0",
       max: "1000",
       value: "0",
-      title: "Seek",
+      title: t("seek"),
     });
     const row = el(pip.document, "div", { className: "floatly-row" });
-    const play = button(pip.document, "Play / pause", icons.play);
-    const rewind = button(pip.document, "Rewind 10 seconds", icons.rewind);
-    const forward = button(pip.document, "Forward 10 seconds", icons.forward);
-    const speed = button(pip.document, "Playback speed", icons.speed);
+    const play = button(pip.document, t("playPause"), icons.play);
+    const rewind = button(pip.document, t("rewindSeconds"), icons.rewind);
+    const forward = button(pip.document, t("forwardSeconds"), icons.forward);
+    const speed = button(pip.document, t("playbackSpeed"), icons.speed);
     const speedMenu = speedSelector(pip.document, video, settings.speedSteps, listenerOptions);
     const mute = button(
       pip.document,
-      "Mute / unmute",
+      t("muteUnmute"),
       video.muted ? icons.muted : icons.volume,
     );
     const volume = el(pip.document, "input", {
@@ -495,13 +506,13 @@
       min: "0",
       max: "100",
       value: String(Math.round(video.volume * 100)),
-      title: "Volume",
+      title: t("volume"),
     });
-    const fit = button(pip.document, "Crop / fit video", icons.crop);
-    const next = button(pip.document, "Next video", icons.next);
+    const fit = button(pip.document, t("cropFitVideo"), icons.crop);
+    const next = button(pip.document, t("nextVideo"), icons.next);
     const live = el(pip.document, "button", {
-      className: "floatly-button floatly-live", type: "button", textContent: "Live",
-      title: "Jump to live", ariaLabel: "Jump to live", hidden: true,
+      className: "floatly-button floatly-live", type: "button", textContent: t("live"),
+      title: t("jumpToLive"), ariaLabel: t("jumpToLive"), hidden: true,
     });
     const time = el(pip.document, "span", {
       className: "floatly-time",
@@ -512,6 +523,7 @@
       ...adapter.controls,
     };
     const context = {
+      t,
       pip,
       video,
       shell,
@@ -624,7 +636,7 @@
       // ponytail: generic streams use a 3-second edge tolerance; site adapters can report atLive directly.
       const atLive = range.live && !video.paused && (range.atLive ?? (seekable && range.end - video.currentTime <= 3));
       live.dataset.atLive = String(atLive);
-      live.title = live.ariaLabel = !seekable ? "Live stream is not seekable" : atLive ? "At live edge" : "Jump to live";
+      live.title = live.ariaLabel = t(!seekable ? "liveNotSeekable" : atLive ? "atLiveEdge" : "jumpToLive");
       time.textContent = range.live
         ? seekable && !atLive ? `-${formatTime(Math.max(0, range.end - video.currentTime))}` : ""
         : `${formatTime(video.currentTime)}${Number.isFinite(range.end) ? ` / ${formatTime(range.end)}` : ""}`;
@@ -682,7 +694,7 @@
       const item = el(document, "button", {
         className: "floatly-speed-option",
         type: "button",
-        textContent: rate === 1 ? "Normal" : `${rate}x`,
+        textContent: rate === 1 ? t("normalSpeed") : `${rate}x`,
       });
       item.dataset.rate = String(rate);
       item.addEventListener("click", () => {

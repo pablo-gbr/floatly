@@ -11,7 +11,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     await chrome.contextMenus.removeAll();
     chrome.contextMenus.create({
       id: "floatly-open-pip",
-      title: "Open in PiP",
+      title: chrome.i18n.getMessage("openInPip"),
       contexts: ["page", "video", "image", "link", "selection", "editable", "frame"],
       documentUrlPatterns: ["http://*/*", "https://*/*", "file:///*"],
     }, () => {
@@ -73,6 +73,12 @@ async function openPiP(tab) {
     if (!response.ok) throw new Error("Could not load Floatly styles.");
     const css = await response.text();
     const { floatlySettings: settings } = await chrome.storage.sync.get({ floatlySettings: {} });
+    const catalogResponse = await fetch(chrome.runtime.getURL("_locales/en/messages.json"));
+    if (!catalogResponse.ok) throw new Error("Could not load Floatly message catalog.");
+    const catalog = await catalogResponse.json();
+    const messages = Object.fromEntries(Object.keys(catalog).map((key) => [key, chrome.i18n.getMessage(key)]));
+    const language = chrome.i18n.getUILanguage();
+    const direction = chrome.i18n.getMessage("@@bidi_dir");
     const commandEvent = `floatly-command-${crypto.randomUUID()}`;
 
     await chrome.scripting.executeScript({
@@ -85,7 +91,7 @@ async function openPiP(tab) {
       target: { tabId: tab.id },
       world: "MAIN",
       func: (data) => { window.__floatlyBootstrap = data; },
-      args: [{ css, settings, commandEvent }],
+      args: [{ css, settings, commandEvent, messages, language, direction }],
     });
 
     await chrome.scripting.executeScript({

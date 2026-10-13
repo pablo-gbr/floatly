@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Floatly Settings</title>
+    <title data-i18n="settingsTitle"></title>
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
@@ -11,37 +11,37 @@
       <header>
         <div class="title">
           <img class="settings-icon" src="../assets/icon1024.png" alt="" width="44" height="44">
-          <h1>Floatly Settings</h1>
+          <h1 data-i18n="settingsTitle"></h1>
         </div>
-        <button id="reset" type="button">Reset</button>
+        <button id="reset" type="button" data-i18n="reset"></button>
       </header>
 
       <section>
-        <h2>Controls</h2>
+        <h2 data-i18n="controls"></h2>
         <label class="color-row">
-          <span>Trackbar color</span>
+          <span data-i18n="trackbarColor"></span>
           <input id="accentColor" type="color">
         </label>
         <div id="controls" class="grid"></div>
       </section>
 
       <section>
-        <h2>Window</h2>
-        <label><input id="clickVideoToTogglePlayback" type="checkbox"> Click video to play / pause</label>
-        <label><input id="rememberWindowSize" type="checkbox"> Remember last window size</label>
-        <label><input id="elementPickerEnabled" type="checkbox"> Enable element picker when no usable video is found</label>
+        <h2 data-i18n="window"></h2>
+        <label><input id="clickVideoToTogglePlayback" type="checkbox"> <span data-i18n="clickVideoPlayback"></span></label>
+        <label><input id="rememberWindowSize" type="checkbox"> <span data-i18n="rememberWindowSize"></span></label>
+        <label><input id="elementPickerEnabled" type="checkbox"> <span data-i18n="enableElementPicker"></span></label>
       </section>
 
       <section>
-        <h2>Speed</h2>
+        <h2 data-i18n="speed"></h2>
         <label class="field">
-          <span>Speed steps, up to 6</span>
+          <span data-i18n="speedSteps"></span>
           <input id="speedSteps" type="text" inputmode="decimal" spellcheck="false">
         </label>
       </section>
 
       <section>
-        <h2>Shortcuts</h2>
+        <h2 data-i18n="shortcuts"></h2>
         <div id="shortcuts" class="grid"></div>
       </section>
     </main>

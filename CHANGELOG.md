@@ -6,6 +6,7 @@ Improved experimental element PiP with a configurable uBlock-style picker. Adapt
 
 ### Added
 
+- English localization catalog for Settings, player controls, the element picker, context menu, and extension metadata. Additional languages can be added through Chrome's native i18n support.
 - Settings toggle to enable or disable the element picker, enabled by default.
 - Open in PiP right-click action with the Floatly icon, using the same video-first flow as the toolbar button. Adds the contextMenus permission.
 - Element PiP now respects window-size memory and preserves the page title and base URL for relative links and resources.

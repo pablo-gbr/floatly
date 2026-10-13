@@ -1,0 +1,88 @@
+{
+  "extensionName": { "message": "Floatly" },
+  "extensionDescription": {
+    "message": "Abre el video principal de la página actual en un reproductor flotante."
+  },
+  "openInPip": { "message": "Abrir en PiP" },
+  "settingsTitle": { "message": "Configuración de Floatly" },
+  "reset": { "message": "Reestablecer" },
+  "controls": { "message": "Controles" },
+  "trackbarColor": { "message": "Color de la barra de reproducción" },
+  "window": { "message": "Ventana" },
+  "clickVideoPlayback": {
+    "message": "Clic en el video para reproducir / pausar"
+  },
+  "rememberWindowSize": { "message": "Recordar el tamaño de la ventana" },
+  "enableElementPicker": {
+    "message": "Habilitar selector de elementos cuando no se encuentre un video utilizable"
+  },
+  "speed": { "message": "Velocidad" },
+  "speedSteps": { "message": "Velocidad, hasta 6 opciones" },
+  "shortcuts": { "message": "Atajos" },
+  "progressBar": { "message": "Barra de progreso" },
+  "rewind": { "message": "Retroceder" },
+  "forward": { "message": "Avanzar" },
+  "speedMenu": { "message": "Menú de velocidad" },
+  "volumeSlider": { "message": "Control deslizante de volumen" },
+  "cropFit": { "message": "Recortar / ajustar" },
+  "time": { "message": "Time" },
+  "playPause": { "message": "Reproducir / Pausar" },
+  "volumeUp": { "message": "Subir volumen" },
+  "volumeDown": { "message": "Bajar volumen" },
+  "keySpace": {
+    "message": "Barra espaciadora",
+    "description": "Nombre de la tecla de espacio."
+  },
+  "pickerTitle": { "message": "Elige un elemento" },
+  "pickerLabel": { "message": "Selector de elementos" },
+  "pickerHoverHelp": {
+    "message": "Pasa el cursor para resaltar un elemento, luego haz clic para seleccionar. La tecla Escape cancela."
+  },
+  "pickerSelectedHelp": {
+    "message": "Elige el elemento o uno de sus antecesores. Enter abre PiP; Escape cancela."
+  },
+  "pickerNoSelection": { "message": "No se ha seleccionado ningún elemento" },
+  "pickerAncestors": { "message": "Elemento seleccionado y sus antecesores" },
+  "pickerAgain": { "message": "Elegir otro" },
+  "cancel": { "message": "Cancelar" },
+  "pickerNote": {
+    "message": "Experimental: algunas características del sitio y sus interacciones pueden no transferirse."
+  },
+  "seek": { "message": "Buscar" },
+  "rewindSeconds": { "message": "Retroceder 10 segundos" },
+  "forwardSeconds": { "message": "Avanzar 10 segundos" },
+  "playbackSpeed": { "message": "Velocidad de reproducción" },
+  "muteUnmute": { "message": "Silenciar / Activar sonido" },
+  "volume": { "message": "Volumen" },
+  "cropFitVideo": { "message": "Recortar / ajustar video" },
+  "nextVideo": { "message": "Siguiente video" },
+  "live": { "message": "En vivo" },
+  "jumpToLive": { "message": "Saltar a vivo" },
+  "liveNotSeekable": { "message": "La transmisión en vivo no es buscable" },
+  "atLiveEdge": { "message": "En vivo" },
+  "normalSpeed": {
+    "message": "Normal",
+    "description": "Velocidad de reproducción normal (1x)."
+  },
+  "quality": { "message": "Calidad" },
+  "qualityUnavailable": {
+    "message": "La selección de calidad no está disponible para este reproductor."
+  },
+  "qualityNotReady": {
+    "message": "Las opciones de calidad aún no están disponibles."
+  },
+  "qualityApiUnavailable": {
+    "message": "La API de calidad de YouTube no está disponible."
+  },
+  "qualityNoLongerAvailable": {
+    "message": "Esta calidad ya no está disponible."
+  },
+  "qualityBest": {
+    "message": "Mejor",
+    "description": "La calidad de video disponible más alta."
+  },
+  "qualityAuto": {
+    "message": "Auto",
+    "description": "Selección automática de calidad de video."
+  }
+}

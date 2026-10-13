@@ -105,14 +105,15 @@
   }
 
   function addQualityControl(context) {
+    const { t } = context;
     const doc = context.pip.document;
     const events = new AbortController();
     const options = { signal: events.signal };
     const button = Object.assign(doc.createElement("button"), {
       className: "floatly-button floatly-quality-button",
       type: "button",
-      title: "Quality",
-      ariaLabel: "Quality",
+      title: t("quality"),
+      ariaLabel: t("quality"),
       textContent: "HD",
     });
     button.setAttribute("aria-haspopup", "menu");
@@ -122,7 +123,7 @@
       hidden: true,
     });
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Quality");
+    menu.setAttribute("aria-label", t("quality"));
     context.addCleanup(() => {
       events.abort();
       button.remove();
@@ -140,12 +141,12 @@
       if (typeof player?.getAvailableQualityLevels !== "function"
           || typeof player.getPlaybackQuality !== "function"
           || typeof player.setPlaybackQualityRange !== "function") {
-        throw new Error("Quality selection is unavailable for this player.");
+        throw new Error(t("qualityUnavailable"));
       }
       const available = player.getAvailableQualityLevels();
       const levels = Array.isArray(available)
         ? [...new Set(available.filter((level) => typeof level === "string" && level && level !== "auto"))] : [];
-      if (!levels.length) throw new Error("Quality options are not available yet.");
+      if (!levels.length) throw new Error(t("qualityNotReady"));
       return { levels: [...levels, "auto"], current: player.getPlaybackQuality() };
     }
 
@@ -153,7 +154,7 @@
       try {
         readQuality();
         button.disabled = false;
-        button.title = button.ariaLabel = "Quality";
+        button.title = button.ariaLabel = t("quality");
       } catch (error) {
         closeMenu();
         button.disabled = true;
@@ -169,7 +170,7 @@
           const item = Object.assign(doc.createElement("button"), {
             className: "floatly-speed-option",
             type: "button",
-            textContent: qualityLabel(level),
+            textContent: qualityLabel(level, t),
           });
           item.setAttribute("role", "menuitemradio");
           item.setAttribute("aria-checked", String(level === current));
@@ -192,11 +193,11 @@
         const level = item.dataset.quality;
         const player = document.querySelector("#movie_player");
         if (typeof player?.setPlaybackQualityRange !== "function") {
-          throw new Error("YouTube quality API is unavailable.");
+          throw new Error(t("qualityApiUnavailable"));
         }
         const available = player.getAvailableQualityLevels?.();
         if (level !== "auto" && (!Array.isArray(available) || !available.includes(level))) {
-          throw new Error("This quality is no longer available.");
+          throw new Error(t("qualityNoLongerAvailable"));
         }
         player.setPlaybackQualityRange(level, level);
         closeMenu();
@@ -239,10 +240,10 @@
     refreshAvailability();
   }
 
-  function qualityLabel(level) {
+  function qualityLabel(level, t) {
     return {
-      highres: "Best", hd2160: "2160p", hd1440: "1440p", hd1080: "1080p",
-      hd720: "720p", large: "480p", medium: "360p", small: "240p", tiny: "144p", auto: "Auto",
+      highres: t("qualityBest"), hd2160: "2160p", hd1440: "1440p", hd1080: "1080p",
+      hd720: "720p", large: "480p", medium: "360p", small: "240p", tiny: "144p", auto: t("qualityAuto"),
     }[level] ?? level;
   }
 

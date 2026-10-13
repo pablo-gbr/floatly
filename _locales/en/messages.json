@@ -1,0 +1,82 @@
+{
+  "extensionName": { "message": "Floatly" },
+  "extensionDescription": {
+    "message": "Open the current page's main video in a lightweight floating player."
+  },
+  "openInPip": { "message": "Open in PiP" },
+  "settingsTitle": { "message": "Floatly Settings" },
+  "reset": { "message": "Reset" },
+  "controls": { "message": "Controls" },
+  "trackbarColor": { "message": "Trackbar color" },
+  "window": { "message": "Window" },
+  "clickVideoPlayback": { "message": "Click video to play / pause" },
+  "rememberWindowSize": { "message": "Remember last window size" },
+  "enableElementPicker": {
+    "message": "Enable element picker when no usable video is found"
+  },
+  "speed": { "message": "Speed" },
+  "speedSteps": { "message": "Speed steps, up to 6" },
+  "shortcuts": { "message": "Shortcuts" },
+  "progressBar": { "message": "Progress bar" },
+  "rewind": { "message": "Rewind" },
+  "forward": { "message": "Forward" },
+  "speedMenu": { "message": "Speed menu" },
+  "volumeSlider": { "message": "Volume slider" },
+  "cropFit": { "message": "Crop / Fit" },
+  "time": { "message": "Time" },
+  "playPause": { "message": "Play / Pause" },
+  "volumeUp": { "message": "Volume up" },
+  "volumeDown": { "message": "Volume down" },
+  "keySpace": {
+    "message": "Space",
+    "description": "Name of the spacebar key."
+  },
+  "pickerTitle": { "message": "Pick an element" },
+  "pickerLabel": { "message": "Floatly element picker" },
+  "pickerHoverHelp": {
+    "message": "Hover to highlight, then click to select. Escape cancels."
+  },
+  "pickerSelectedHelp": {
+    "message": "Choose the element or an ancestor. Enter opens PiP; Escape cancels."
+  },
+  "pickerNoSelection": { "message": "No element selected" },
+  "pickerAncestors": { "message": "Selected element and its ancestors" },
+  "pickerAgain": { "message": "Pick another" },
+  "cancel": { "message": "Cancel" },
+  "pickerNote": {
+    "message": "Experimental: some site styles and interactions may not carry over."
+  },
+  "seek": { "message": "Seek" },
+  "rewindSeconds": { "message": "Rewind 10 seconds" },
+  "forwardSeconds": { "message": "Forward 10 seconds" },
+  "playbackSpeed": { "message": "Playback speed" },
+  "muteUnmute": { "message": "Mute / Unmute" },
+  "volume": { "message": "Volume" },
+  "cropFitVideo": { "message": "Crop / fit video" },
+  "nextVideo": { "message": "Next video" },
+  "live": { "message": "Live" },
+  "jumpToLive": { "message": "Jump to live" },
+  "liveNotSeekable": { "message": "Live stream is not seekable" },
+  "atLiveEdge": { "message": "At live edge" },
+  "normalSpeed": {
+    "message": "Normal",
+    "description": "Normal playback speed (1x)."
+  },
+  "quality": { "message": "Quality" },
+  "qualityUnavailable": {
+    "message": "Quality selection is unavailable for this player."
+  },
+  "qualityNotReady": { "message": "Quality options are not available yet." },
+  "qualityApiUnavailable": { "message": "YouTube quality API is unavailable." },
+  "qualityNoLongerAvailable": {
+    "message": "This quality is no longer available."
+  },
+  "qualityBest": {
+    "message": "Best",
+    "description": "Highest available video quality."
+  },
+  "qualityAuto": {
+    "message": "Auto",
+    "description": "Automatic video quality selection."
+  }
+}
