@@ -1,6 +1,7 @@
 const defaultSettings = {
   accentColor: "#45d19f",
   clickVideoToTogglePlayback: true,
+  elementPickerEnabled: true,
   rememberWindowSize: false,
   windowSize: null,
   speedSteps: [0.5, 0.75, 1, 1.25, 1.5, 2],
@@ -43,6 +44,7 @@ const shortcutLabels = {
 const colorInput = document.querySelector("#accentColor");
 const controls = document.querySelector("#controls");
 const clickVideoToTogglePlayback = document.querySelector("#clickVideoToTogglePlayback");
+const elementPickerEnabled = document.querySelector("#elementPickerEnabled");
 const rememberWindowSize = document.querySelector("#rememberWindowSize");
 const speedSteps = document.querySelector("#speedSteps");
 const shortcuts = document.querySelector("#shortcuts");
@@ -82,6 +84,7 @@ function mergeSettings(settings) {
 function render(settings) {
   colorInput.value = settings.accentColor;
   clickVideoToTogglePlayback.checked = settings.clickVideoToTogglePlayback;
+  elementPickerEnabled.checked = settings.elementPickerEnabled;
   rememberWindowSize.checked = settings.rememberWindowSize;
   speedSteps.value = settings.speedSteps.join(", ");
   controls.textContent = "";
@@ -132,6 +135,12 @@ rememberWindowSize.addEventListener("change", async () => {
   const settings = await getSettings();
   settings.rememberWindowSize = rememberWindowSize.checked;
   if (!rememberWindowSize.checked) settings.windowSize = null;
+  await save(settings);
+});
+
+elementPickerEnabled.addEventListener("change", async () => {
+  const settings = await getSettings();
+  settings.elementPickerEnabled = elementPickerEnabled.checked;
   await save(settings);
 });
 

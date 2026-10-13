@@ -6,12 +6,33 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync" && changes.floatlySettings) cachedSettings = changes.floatlySettings.newValue ?? {};
 });
 
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id) return;
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    await chrome.contextMenus.removeAll();
+    chrome.contextMenus.create({
+      id: "floatly-open-pip",
+      title: "Open in PiP",
+      contexts: ["page", "video", "image", "link", "selection", "editable", "frame"],
+      documentUrlPatterns: ["http://*/*", "https://*/*", "file:///*"],
+    }, () => {
+      if (chrome.runtime.lastError) console.error("Floatly context menu setup failed.", chrome.runtime.lastError);
+    });
+  } catch (error) {
+    console.error("Floatly context menu setup failed.", error);
+  }
+});
+
+chrome.action.onClicked.addListener(openPiP);
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "floatly-open-pip") return openPiP(tab);
+});
+
+async function openPiP(tab) {
+  if (!tab?.id) return;
   if (isRestrictedUrl(tab.url)) return;
 
   try {
-    // requestWindow must run in the first injection, while the toolbar click is still active.
+    // requestWindow must run in the first injection, while the toolbar or menu click is still active.
     const [opening] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       world: "MAIN",
@@ -19,6 +40,10 @@ chrome.action.onClicked.addListener(async (tab) => {
         if (!("documentPictureInPicture" in window)) return false;
         const state = (window.__floatlyState ??= {});
         if (state.opening || state.preparing) return false;
+        if (state.cancelPicker) {
+          state.cancelPicker();
+          return false;
+        }
         if (state.restore) {
           const pip = state.pip;
           if (state.restore()) pip?.close();
@@ -90,7 +115,7 @@ chrome.action.onClicked.addListener(async (tab) => {
       if (!isExpectedInjectionFailure(cleanupError)) console.error("Floatly pending PiP cleanup failed.", cleanupError);
     }
   }
-});
+}
 
 function installSettingsBridge(commandEvent) {
   window.__floatlySettingsBridgeCleanup?.();

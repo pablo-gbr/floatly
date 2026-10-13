@@ -25,7 +25,12 @@ body {
 
 .floatly-selected-element {
   box-sizing: border-box !important;
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
   max-width: none !important;
+  margin: 0 !important;
+  transform: none !important;
 }
 
 .floatly-video {
@@ -34,17 +39,6 @@ body {
   max-height: none !important;
   object-fit: contain;
   background: #000;
-}
-
-.floatly-picker-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 2147483647;
-  box-sizing: border-box;
-  border: 2px solid #45d19f;
-  background: rgb(69 209 159 / 0.12);
-  pointer-events: none;
 }
 
 .floatly-video-fill {

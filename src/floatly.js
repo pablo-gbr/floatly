@@ -4,6 +4,7 @@
   const defaultSettings = {
     accentColor: "#45d19f",
     clickVideoToTogglePlayback: true,
+    elementPickerEnabled: true,
     rememberWindowSize: false,
     windowSize: null,
     speedSteps: rates,
@@ -32,6 +33,11 @@
   state.preparing = false;
 
   if (state.opening) return;
+  if (state.cancelPicker) {
+    state.cancelPicker();
+    pendingPiP?.close();
+    return;
+  }
   if (state.restore) {
     const pip = state.pip;
     if (state.restore()) pip?.close();
@@ -51,8 +57,8 @@
     let adapter;
     let video;
     try {
-      adapter = window.FloatlyAdapters?.match() ?? {};
-      video = findVideo(adapter);
+      adapter = window.FloatlyAdapters?.match();
+      video = findVideo(adapter ?? {});
       if (video && !(video instanceof HTMLVideoElement)) {
         throw new TypeError("Adapter must return the original HTMLVideoElement.");
       }
@@ -62,8 +68,11 @@
     }
     if (!video) {
       pendingPiP?.close();
-      return openSelectedElementPiP(css);
+      if (settings.elementPickerEnabled) return openSelectedElementPiP(css, settings);
+      document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: { command: "dispose" } }));
+      return;
     }
+    adapter ??= {};
 
     const cleanup = [];
     let context;
@@ -103,9 +112,12 @@
     }
   }
 
-  async function openSelectedElementPiP(css) {
+  async function openSelectedElementPiP(css, settings) {
     const target = await pickElement();
-    if (!target) return;
+    if (!target || !target.isConnected) {
+      document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: { command: "dispose" } }));
+      return;
+    }
 
     const rect = target.getBoundingClientRect();
     const cleanup = [];
@@ -113,12 +125,15 @@
     let pip;
     state.opening = true;
     try {
-      pip = await documentPictureInPicture.requestWindow({
+      pip = await documentPictureInPicture.requestWindow(settings.rememberWindowSize && settings.windowSize ? settings.windowSize : {
         width: Math.max(360, Math.min(900, Math.round(rect.width || 640))),
         height: Math.max(240, Math.min(700, Math.round(rect.height || 420))),
       });
       state.pip = pip;
       registerLifecycle(pip, restorePiP, cleanup);
+      pip.addEventListener("resize", () => saveWindowSize(pip, settings));
+      pip.document.title = document.title;
+      pip.document.head.append(el(pip.document, "base", { href: document.baseURI }));
       const shell = el(pip.document, "main", { className: "floatly-shell floatly-element-shell" });
       copyPageStyles(pip.document);
       pip.document.head.appendChild(el(pip.document, "style", { textContent: css }));
@@ -135,7 +150,7 @@
 
   function prepareRestoration(node, adapter, cleanup, getContext = () => null) {
     const restore = {
-      className: node.className,
+      className: node.getAttribute("class"),
       style: node.getAttribute("style"),
       host: node.parentElement,
       nextSibling: node.nextSibling,
@@ -195,7 +210,9 @@
     }
 
     parent.insertBefore(node, before);
-    node.className = restore.className;
+    restore.className === null
+      ? node.removeAttribute("class")
+      : node.setAttribute("class", restore.className);
     restore.style === null
       ? node.removeAttribute("style")
       : node.setAttribute("style", restore.style);
@@ -214,182 +231,174 @@
 
   function pickElement() {
     return new Promise((resolve) => {
-      const candidates = [];
+      let candidates = [];
       let current = null;
-      let candidateIndex = 0;
       let locked = false;
-      const overlay = el(document, "div", { className: "floatly-picker-overlay" });
-      const panel = el(document, "div", { className: "floatly-picker-panel" });
-      const warning = el(document, "div", {
-        className: "floatly-picker-warning",
-        textContent: "Element PiP is experimental; selected elements may not stay interactive.",
-      });
-      const label = el(document, "div", { className: "floatly-picker-label" });
-      const pick = el(document, "button", { type: "button", textContent: "Pick" });
-      const parent = el(document, "button", { type: "button", textContent: "Parent" });
-      const child = el(document, "button", { type: "button", textContent: "Child" });
-      const cancel = el(document, "button", { type: "button", textContent: "Cancel" });
-
-      overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        z-index: 2147483646;
-        box-sizing: border-box;
-        border: 2px solid #45d19f;
-        background: rgb(69 209 159 / 0.12);
-        pointer-events: none;
-        transform: translate(-9999px, -9999px);
-      `;
-      panel.style.cssText = `
-        position: fixed;
-        right: 14px;
-        bottom: 14px;
-        z-index: 2147483647;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto auto auto auto;
-        align-items: center;
-        gap: 8px;
-        max-width: min(620px, calc(100vw - 28px));
-        padding: 10px;
-        border-radius: 8px;
-        color: #f7f7f7;
-        background: rgb(16 18 21 / 0.96);
-        box-shadow: 0 10px 32px rgb(0 0 0 / 0.35);
-        font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      `;
-      label.style.cssText = `
-        min-width: 0;
-        grid-column: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      `;
-      warning.style.cssText = `
-        grid-column: 1 / -1;
-        color: #f6c96b;
-        font-size: 12px;
-      `;
-      for (const button of [pick, parent, child, cancel]) {
-        button.style.cssText = `
-          height: 30px;
-          padding: 0 10px;
-          border: 1px solid rgb(255 255 255 / 0.18);
-          border-radius: 6px;
-          color: inherit;
-          background: rgb(255 255 255 / 0.08);
-          cursor: pointer;
-        `;
-      }
-      panel.append(warning, label, pick, parent, child, cancel);
+      let finished = false;
+      const previousFocus = document.activeElement;
+      const host = el(document, "div", { popover: "manual" });
+      const shadow = host.attachShadow({ mode: "closed" });
+      shadow.innerHTML = `
+        <style>
+          :host { all: initial !important; position: fixed !important; inset: 0 !important;
+            width: 100vw !important; height: 100vh !important; max-width: none !important;
+            max-height: none !important; margin: 0 !important; padding: 0 !important;
+            border: 0 !important; background: transparent !important; z-index: 2147483647 !important; }
+          :host::backdrop { background: transparent; pointer-events: none; }
+          :host([data-floatly-hit-test]) { visibility: hidden !important; }
+          * { box-sizing: border-box; }
+          .surface { position: absolute; inset: 0; cursor: crosshair; }
+          .highlight { position: fixed; pointer-events: none; border: 2px solid #45d19f;
+            background: rgb(69 209 159 / 0.12); box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.55); }
+          .highlight[hidden] { display: none; }
+          .panel { position: absolute; right: 14px; bottom: 14px;
+            width: min(360px, calc(100vw - 28px)); max-height: calc(100vh - 28px);
+            overflow: auto; padding: 16px; border-radius: 8px; color: #f7f7f7; background: #17191d;
+            box-shadow: 0 10px 32px rgb(0 0 0 / 0.4); font: 13px/1.5 system-ui, sans-serif; }
+          h2 { margin: 0 0 6px; font-size: 16px; } p { margin: 6px 0; }
+          .selector { overflow-wrap: anywhere; font-family: monospace; }
+          select { width: 100%; margin: 8px 0; }
+          button, select { padding: 6px 8px; border: 1px solid #737780; border-radius: 4px;
+            color: inherit; background: #292c33; font: inherit; }
+          button { cursor: pointer; }
+          button:disabled, select:disabled { opacity: 0.5; cursor: default; }
+          button:focus-visible, select:focus-visible { outline: 2px solid #45d19f; outline-offset: 2px; }
+          .open { background: #45d19f; color: #101215; }
+          .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+          .note { color: #f6c96b; font-size: 12px; }
+        </style>
+        <div class="surface"></div><div class="highlight" hidden></div>
+        <section class="panel" role="dialog" aria-label="Floatly element picker">
+          <h2>Float an element</h2>
+          <p class="help">Hover to highlight, then click to select. Escape cancels.</p>
+          <p class="selector" aria-live="polite">No element selected</p>
+          <select aria-label="Selected element and its ancestors" size="4" disabled></select>
+          <div class="actions">
+            <button class="open" type="button" disabled>Open in PiP</button>
+            <button class="again" type="button" disabled>Pick another</button>
+            <button class="cancel" type="button">Cancel</button>
+          </div>
+          <p class="note">Experimental: some site styles and interactions may not carry over.</p>
+        </section>`;
+      const surface = shadow.querySelector('.surface');
+      const overlay = shadow.querySelector('.highlight');
+      const help = shadow.querySelector('.help');
+      const label = shadow.querySelector('.selector');
+      const choices = shadow.querySelector('select');
+      const pick = shadow.querySelector('.open');
+      const again = shadow.querySelector('.again');
+      const cancel = shadow.querySelector('.cancel');
 
       function cleanup(value = null) {
-        overlay.remove();
-        panel.remove();
-        document.removeEventListener("mousemove", onMove, true);
-        document.removeEventListener("click", onClick, true);
-        document.removeEventListener("keydown", onKeyDown, true);
+        if (finished) return;
+        finished = true;
+        host.remove();
+        document.removeEventListener('keydown', onKeyDown, true);
+        window.removeEventListener('scroll', drawOverlay, true);
+        window.removeEventListener('resize', drawOverlay);
+        window.removeEventListener('pagehide', onPageHide);
+        if (state.cancelPicker === cleanup) state.cancelPicker = null;
+        previousFocus?.focus?.({ preventScroll: true });
         resolve(value);
       }
-
-      function onMove(event) {
-        if (locked) return;
-        const target = document.elementFromPoint(event.clientX, event.clientY);
-        if (!isPickable(target)) return;
-
-        setCurrent(target);
-      }
-
-      function onClick(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.target === pick) return cleanup(current);
-        if (event.target === parent) return selectRelative(1);
-        if (event.target === child) return selectRelative(-1);
-        if (event.target === cancel) return cleanup();
-
-        locked = true;
-        panel.hidden = false;
-      }
-
-      function onKeyDown(event) {
-        if (event.key === "Enter" && locked) {
-          event.preventDefault();
-          event.stopPropagation();
-          cleanup(current);
-          return;
-        }
-
-        if (event.key === "ArrowUp" && locked) {
-          event.preventDefault();
-          event.stopPropagation();
-          selectRelative(1);
-          return;
-        }
-
-        if (event.key === "ArrowDown" && locked) {
-          event.preventDefault();
-          event.stopPropagation();
-          selectRelative(-1);
-          return;
-        }
-
-        if (event.key !== "Escape") return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        cleanup();
-      }
-
-      function selectRelative(offset) {
-        if (!candidates.length) return;
-
-        candidateIndex = Math.max(0, Math.min(candidates.length - 1, candidateIndex + offset));
-        current = candidates[candidateIndex];
-        drawOverlay(current);
-      }
-
-      function setCurrent(target) {
-        current = target;
-        candidates.length = 0;
-        for (let node = target; isPickable(node); node = node.parentElement) {
-          candidates.push(node);
-        }
-        candidateIndex = 0;
-        drawOverlay(current);
-      }
-
-      function drawOverlay(target) {
-        const rect = target.getBoundingClientRect();
-        overlay.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
-        overlay.style.width = `${rect.width}px`;
-        overlay.style.height = `${rect.height}px`;
-        label.textContent = describeElement(target);
-        parent.disabled = candidateIndex >= candidates.length - 1;
-        child.disabled = candidateIndex <= 0;
-      }
-
       function isPickable(target) {
-        return target instanceof Element
-          && target !== document.body
-          && target !== document.documentElement
-          && target !== overlay
-          && target !== panel
-          && !panel.contains(target);
+        return target instanceof Element && target.isConnected
+          && target !== document.body && target !== document.documentElement && target !== host
+          && !['SCRIPT', 'STYLE', 'LINK', 'META', 'HEAD'].includes(target.tagName);
       }
-
+      function targetAt(event) {
+        // ponytail: selects light DOM; frame contents and closed shadow roots need their own picker.
+        host.setAttribute('data-floatly-hit-test', '');
+        try { return document.elementFromPoint(event.clientX, event.clientY); }
+        finally { host.removeAttribute('data-floatly-hit-test'); }
+      }
       function describeElement(target) {
-        const id = target.id ? `#${target.id}` : "";
-        const classes = [...target.classList].slice(0, 3).map((name) => `.${name}`).join("");
+        const id = target.id ? `#${CSS.escape(target.id)}` : '';
+        const classes = [...target.classList].slice(0, 3).map((name) => `.${CSS.escape(name)}`).join('');
         return `${target.tagName.toLowerCase()}${id}${classes}`;
       }
-
-      document.body.append(overlay);
-      document.body.append(panel);
-      panel.hidden = true;
-      document.addEventListener("mousemove", onMove, true);
-      document.addEventListener("click", onClick, true);
-      document.addEventListener("keydown", onKeyDown, true);
+      function setCurrent(target) {
+        current = isPickable(target) ? target : null;
+        candidates = [];
+        for (let node = current; isPickable(node); node = node.parentElement) candidates.push(node);
+        choices.replaceChildren(...candidates.map((node, index) => el(document, 'option', {
+          value: String(index), textContent: describeElement(node),
+        })));
+        choices.selectedIndex = current ? 0 : -1;
+        drawOverlay();
+      }
+      function drawOverlay() {
+        const valid = isPickable(current);
+        overlay.hidden = !valid;
+        pick.disabled = !locked || !valid;
+        again.disabled = !locked;
+        choices.disabled = !locked || !valid;
+        label.textContent = valid ? describeElement(current) : 'No element selected';
+        if (!valid) return;
+        const rect = current.getBoundingClientRect();
+        Object.assign(overlay.style, { left: `${rect.left}px`, top: `${rect.top}px`,
+          width: `${rect.width}px`, height: `${rect.height}px` });
+      }
+      surface.addEventListener('pointermove', (event) => {
+        if (!locked) setCurrent(targetAt(event));
+      });
+      surface.addEventListener('click', (event) => {
+        if (locked) return;
+        setCurrent(targetAt(event));
+        if (!current) return;
+        locked = true;
+        help.textContent = 'Choose the element or an ancestor. Enter opens PiP; Escape cancels.';
+        drawOverlay();
+        pick.focus();
+      });
+      choices.addEventListener('change', () => {
+        current = candidates[choices.selectedIndex] ?? null;
+        drawOverlay();
+      });
+      pick.addEventListener('click', () => {
+        if (locked && isPickable(current)) cleanup(current);
+      });
+      again.addEventListener('click', () => {
+        locked = false;
+        help.textContent = 'Hover to highlight, then click to select. Escape cancels.';
+        setCurrent(null);
+      });
+      cancel.addEventListener('click', () => cleanup());
+      for (const name of ['pointerdown', 'pointerup', 'pointermove', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu']) {
+        shadow.addEventListener(name, (event) => {
+          event.stopPropagation();
+          if (name === 'contextmenu') event.preventDefault();
+        });
+      }
+      function onKeyDown(event) {
+        if (event.key === 'Escape') {
+          event.preventDefault(); event.stopImmediatePropagation(); cleanup();
+        } else if (event.key === 'Tab') {
+          const buttons = [choices, pick, again, cancel].filter((node) => !node.disabled);
+          const index = buttons.indexOf(shadow.activeElement);
+          event.preventDefault(); event.stopImmediatePropagation();
+          buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+        } else if (locked && event.key === 'Enter' && ![again, cancel].includes(shadow.activeElement)) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          if (isPickable(current)) cleanup(current);
+        } else if (locked && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          const index = candidates.indexOf(current) + (event.key === 'ArrowUp' ? 1 : -1);
+          choices.selectedIndex = Math.max(0, Math.min(candidates.length - 1, index));
+          current = candidates[choices.selectedIndex] ?? null;
+          drawOverlay();
+        }
+      }
+      function onPageHide() { cleanup(); }
+      state.cancelPicker = cleanup;
+      document.body.append(host);
+      // Use the native top layer to stay above site dialogs and sticky headers.
+      host.showPopover?.();
+      document.addEventListener('keydown', onKeyDown, true);
+      window.addEventListener('scroll', drawOverlay, true);
+      window.addEventListener('resize', drawOverlay);
+      window.addEventListener('pagehide', onPageHide);
+      cancel.focus();
     });
   }
 
