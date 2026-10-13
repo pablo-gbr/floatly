@@ -22,7 +22,7 @@
   "forward": { "message": "Forward" },
   "speedMenu": { "message": "Speed menu" },
   "volumeSlider": { "message": "Volume slider" },
-  "cropFit": { "message": "Crop / Fit" },
+  "cropFit": { "message": "Crop / fit" },
   "time": { "message": "Time" },
   "playPause": { "message": "Play / Pause" },
   "volumeUp": { "message": "Volume up" },
