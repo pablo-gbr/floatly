@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 - 2026-10-14
+
+### Added
+
+- YouTube chapter markers on the seek bar and a popup showing the hovered timestamp and chapter title. Keyboard focus also displays the preview.
+- Seekable live streams show time behind the live edge using YouTube's DVR bounds, without chapter markers or titles. Non-seekable streams hide the preview.
+
 ## 1.1.0 - 2026-10-13
 
 Improved experimental element PiP with a configurable uBlock-style picker. Adapter video playback remains unchanged.
