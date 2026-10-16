@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0 - 2026-10-16
+
+### Added
+
+- YouTube captions and autoplay toggles between the time display and HD button, synchronized with YouTube's controls.
+- Configurable playback speed shortcuts: Shift + Right increases speed by 0.25× and Shift + Left decreases it, within 0.25×–16×.
+- A localized “This video is now in PiP” placeholder in the original YouTube player, removed when the video returns.
+
+### Fixed
+
+- Caption icons, including the settings gear, stay aligned with the text at the correct size in PiP.
+- Keyboard shortcuts distinguish modifier keys, so speed shortcuts do not also seek the video.
+
 ## 1.1.1 - 2026-10-14
 
 ### Added
