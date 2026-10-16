@@ -10,7 +10,9 @@ const defaultSettings = {
     rewind: "ArrowLeft",
     forward: "ArrowRight",
     volumeUp: "ArrowUp",
-    volumeDown: "ArrowDown"
+    volumeDown: "ArrowDown",
+    speedUp: "Shift+ArrowRight",
+    speedDown: "Shift+ArrowLeft"
   },
   controls: {
     progress: true,
@@ -39,7 +41,9 @@ const shortcutLabels = {
   rewind: t("rewind"),
   forward: t("forward"),
   volumeUp: t("volumeUp"),
-  volumeDown: t("volumeDown")
+  volumeDown: t("volumeDown"),
+  speedUp: t("speedUp"),
+  speedDown: t("speedDown")
 };
 
 const colorInput = document.querySelector("#accentColor");
@@ -169,10 +173,11 @@ async function save(settings) {
 }
 
 async function setShortcut(event, key, input) {
-  if (event.key === "Tab") return;
+  if (["Tab", "Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
 
   event.preventDefault();
-  const shortcut = event.key === "Escape" ? defaultSettings.shortcuts[key] : event.key;
+  const shortcut = event.key === "Escape" ? defaultSettings.shortcuts[key]
+    : [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.metaKey && "Meta", event.shiftKey && "Shift", event.key].filter(Boolean).join("+");
   const settings = await getSettings();
   settings.shortcuts[key] = shortcut;
   input.value = displayKey(shortcut);

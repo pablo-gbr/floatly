@@ -123,6 +123,10 @@
         padding-bottom: 58px !important;
       }
 
+      .floatly-shell[data-floatly-captions="false"] .ytp-caption-window-container {
+        display: none !important;
+      }
+
       .caption-window {
         position: static !important;
         inset: auto !important;
@@ -141,10 +145,18 @@
       .ytp-caption-segment {
         font-size: max(3.2vw, 12px) !important;
       }
+
+      .ytp-caption-window-container svg {
+        width: 1em !important;
+        height: 1em !important;
+        display: inline-block;
+        vertical-align: -0.15em;
+        fill: currentColor;
+      }
     `,
     onEnter(context) {
       addPiPPlaceholder(context);
-      moveIntoPiP(".ytp-caption-window-container", context);
+      addYouTubeToggles(context);
       addQualityControl(context);
       addChapterPreview(context, this);
     },
@@ -152,6 +164,51 @@
       document.querySelector(".ytp-next-button.ytp-button")?.click();
     },
   });
+
+  function addYouTubeToggles(context) {
+    const player = document.querySelector("#movie_player");
+    if (!player) return;
+    const events = new AbortController();
+    const toggles = [
+      { key: "captions", text: "CC", selector: ".ytp-subtitles-button", attribute: "aria-pressed" },
+      { key: "autoplay", text: "AUTO", selector: ".ytp-autonav-toggle-button", attribute: "aria-checked" },
+    ].map((toggle) => {
+      const button = Object.assign(context.pip.document.createElement("button"), {
+        className: `floatly-button floatly-${toggle.key}-button`, type: "button",
+        textContent: toggle.text, title: context.t(toggle.key), ariaLabel: context.t(toggle.key),
+      });
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => {
+        const native = player.querySelector(toggle.selector);
+        if (!button.disabled && native) (native.closest(".ytp-button") ?? native).click();
+        sync();
+      }, { signal: events.signal });
+      context.row.append(button);
+      return { ...toggle, button };
+    });
+    function sync() {
+      for (const { key, selector, attribute, button } of toggles) {
+        const native = player.querySelector(selector);
+        const value = native?.getAttribute(attribute);
+        button.disabled = !native || native.disabled || native.getAttribute("aria-disabled") === "true"
+          || (value !== "true" && value !== "false");
+        button.setAttribute("aria-pressed", String(value === "true"));
+        if (key === "captions") context.shell.setAttribute("data-floatly-captions", String(value === "true"));
+      }
+      // Captions can be created only after the viewer enables them.
+      moveIntoPiP(".ytp-caption-window-container", context);
+    }
+    const observer = new MutationObserver(sync);
+    observer.observe(player, { subtree: true, childList: true, attributes: true,
+      attributeFilter: ["aria-pressed", "aria-checked", "aria-disabled", "disabled"] });
+    context.addCleanup(() => {
+      observer.disconnect();
+      events.abort();
+      context.shell.removeAttribute("data-floatly-captions");
+      for (const { button } of toggles) button.remove();
+    });
+    sync();
+  }
 
   function addPiPPlaceholder(context) {
     const player = document.querySelector("#movie_player");

@@ -1,5 +1,9 @@
 {
   "extensionName": { "message": "Floatly" },
+  "speedUp": { "message": "Aumentar velocidad" },
+  "speedDown": { "message": "Disminuir velocidad" },
+  "captions": { "message": "Subtítulos" },
+  "autoplay": { "message": "Reproducir siguiente video automáticamente" },
   "videoInPip": { "message": "Este video está en PiP" },
   "extensionDescription": {
     "message": "Abre el video principal de la página actual en un reproductor flotante."

@@ -16,6 +16,10 @@
     "message": "Enable element picker when no usable video is found"
   },
   "speed": { "message": "Speed" },
+  "speedUp": { "message": "Increase playback speed" },
+  "speedDown": { "message": "Decrease playback speed" },
+  "captions": { "message": "Captions" },
+  "autoplay": { "message": "Autoplay next video" },
   "speedSteps": { "message": "Speed steps, up to 6" },
   "shortcuts": { "message": "Shortcuts" },
   "progressBar": { "message": "Progress bar" },

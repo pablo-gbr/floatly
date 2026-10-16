@@ -14,6 +14,8 @@
       forward: "ArrowRight",
       volumeUp: "ArrowUp",
       volumeDown: "ArrowDown",
+      speedUp: "Shift+ArrowRight",
+      speedDown: "Shift+ArrowLeft",
     },
     controls: {
       progress: true,
@@ -796,16 +798,20 @@
 
   function handleKeys(event, context, shortcuts, adapter) {
     if (event.defaultPrevented || event.target.closest?.("button, input, select, textarea, [contenteditable]")) return;
-    if (event.key === shortcuts.playPause) {
+    const key = [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.metaKey && "Meta", event.shiftKey && "Shift", event.key].filter(Boolean).join("+");
+    if (key === shortcuts.playPause) {
       context.video.paused ? context.video.play() : context.video.pause();
-    } else if (event.key === shortcuts.rewind) {
+    } else if (key === shortcuts.rewind) {
       seekBy(context, -10, adapter);
-    } else if (event.key === shortcuts.forward) {
+    } else if (key === shortcuts.forward) {
       seekBy(context, 10, adapter);
-    } else if (event.key === shortcuts.volumeUp) {
+    } else if (key === shortcuts.volumeUp) {
       context.video.volume = Math.min(1, context.video.volume + 0.1);
-    } else if (event.key === shortcuts.volumeDown) {
+    } else if (key === shortcuts.volumeDown) {
       context.video.volume = Math.max(0, context.video.volume - 0.1);
+    } else if (key === shortcuts.speedUp || key === shortcuts.speedDown) {
+      context.video.playbackRate = Math.max(0.25, Math.min(16,
+        Math.round((context.video.playbackRate + (key === shortcuts.speedUp ? 0.25 : -0.25)) * 100) / 100));
     } else {
       return;
     }
