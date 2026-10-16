@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Experimental desktop Firefox 151+ support using the same manifest and player as Chrome. Includes a Firefox add-on ID, minimum version, and no-data-collection declaration.
+
+### Changed
+
+- Extension pages prefer Firefox's Promise-based `browser` API and fall back to Chrome's API.
+- Settings bridge commands use validated JSON strings across script worlds for Firefox compatibility.
+- Script injection handles Firefox's per-frame errors and cleans up pending PiP windows on setup failures.
+- The shared manifest requires Chrome 121+; Firefox loads background scripts while Chrome uses its service worker.
+
 ## 1.2.0 - 2026-10-16
 
 ### Added

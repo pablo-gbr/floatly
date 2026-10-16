@@ -3,11 +3,13 @@
     <img src="assets/icon1024.png" alt="" width="42" height="42" />
     Floatly
   </h1>
-  <p><strong>A small, privacy-friendly Picture-in-Picture extension for Chrome.</strong></p>
+  <p><strong>A small, privacy-friendly Picture-in-Picture extension for Chrome and Firefox.</strong></p>
   <p>Floatly opens the current page's main video in a lightweight floating window with playback controls, speed controls, site adapters, and configurable UI.</p>
 </div>
 
 YouTube playback is stable; other site adapters and element PiP remain experimental. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+Desktop Chrome 121+ and Firefox 151+ are supported by the shared manifest. Firefox support is experimental and still needs live playback testing. Older Firefox versions and Firefox for Android lack the Document Picture-in-Picture API required by Floatly.
 
 ## Features
 
@@ -38,6 +40,17 @@ Coming soon.
 3. Click **Load unpacked**.
 4. Select this folder.
 
+For Firefox 151+:
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on**.
+3. Select this folder's `manifest.json`.
+4. Open a YouTube video and click Floatly in the extensions menu or toolbar.
+
+Temporary add-ons are removed when Firefox restarts. The same source and ZIP work for both browsers; permanent Firefox installation requires Mozilla signing. Floatly uses Firefox's background event page and Chrome's service worker, with no additional dependencies or host permissions.
+
+For a live Firefox check, try opening and closing PiP, returning the video to the tab, captions, autoplay, HD selection, live seeking, speed shortcuts, saved window size, and the element picker. Confirm that closing PiP restores playback to the original page.
+
 ## Permissions
 
 Floatly uses only:
@@ -51,7 +64,7 @@ There are no analytics, background network calls, or broad host permissions.
 
 ## Settings
 
-Open Floatly's options page from `chrome://extensions` to change the trackbar color, hide controls, remember the floating window size, edit up to 6 speed steps, and customize in-player shortcut keys.
+Open Floatly's options page from `chrome://extensions` or Firefox's `about:addons` to change the trackbar color, hide controls, remember the floating window size, edit up to 6 speed steps, and customize in-player shortcut keys.
 
 The **Enable element picker when no usable video is found** option is enabled by default. Floatly always tries video playback first. If no usable video is found, the enabled picker lets you select an element to move into PiP and restores it when PiP closes. This is experimental: some styles and interactions depend on the original page layout. The picker selects frame and shadow hosts, not their internal elements.
 

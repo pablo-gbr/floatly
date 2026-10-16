@@ -11,8 +11,18 @@
     "128": "assets/icon128.png"
   },
   "background": {
+    "scripts": ["src/background.js"],
     "service_worker": "src/background.js",
     "type": "module"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{3e4c2f95-7efc-432d-9052-6abd56269397}",
+      "strict_min_version": "151.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
   },
   "action": {
     "default_title": "__MSG_extensionName__",

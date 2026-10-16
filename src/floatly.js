@@ -72,7 +72,7 @@
     if (!video) {
       pendingPiP?.close();
       if (settings.elementPickerEnabled) return openSelectedElementPiP(css, settings);
-      document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: { command: "dispose" } }));
+      document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: JSON.stringify({ command: "dispose" }) }));
       return;
     }
     adapter ??= {};
@@ -118,7 +118,7 @@
   async function openSelectedElementPiP(css, settings) {
     const target = await pickElement();
     if (!target || !target.isConnected) {
-      document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: { command: "dispose" } }));
+      document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: JSON.stringify({ command: "dispose" }) }));
       return;
     }
 
@@ -175,7 +175,7 @@
         console.error("Floatly restoration failed; recovery is retained for retry.", error);
       } finally {
         runCleanup(cleanup);
-        runCleanup([() => document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: { command: "dispose" } }))]);
+        runCleanup([() => document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, { detail: JSON.stringify({ command: "dispose" }) }))]);
         restoring = false;
       }
       if (!restored) return false;
@@ -792,7 +792,8 @@
     if (!settings.rememberWindowSize) return;
 
     document.dispatchEvent(new CustomEvent(bootstrap.commandEvent, {
-      detail: { command: "saveWindowSize", width: pip.innerWidth, height: pip.innerHeight },
+      // Firefox blocks page-owned objects in content-script CustomEvent detail; use a string.
+      detail: JSON.stringify({ command: "saveWindowSize", width: pip.innerWidth, height: pip.innerHeight }),
     }));
   }
 

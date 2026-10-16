@@ -1,3 +1,5 @@
+const extension = globalThis.browser ?? globalThis.chrome;
+
 const defaultSettings = {
   accentColor: "#45d19f",
   clickVideoToTogglePlayback: true,
@@ -25,7 +27,7 @@ const defaultSettings = {
   }
 };
 
-const t = (key) => chrome.i18n.getMessage(key);
+const t = (key) => extension.i18n.getMessage(key);
 const controlLabels = {
   progress: t("progressBar"),
   rewind: t("rewind"),
@@ -58,7 +60,7 @@ const reset = document.querySelector("#reset");
 init();
 
 async function init() {
-  document.documentElement.lang = chrome.i18n.getUILanguage();
+  document.documentElement.lang = extension.i18n.getUILanguage();
   document.documentElement.dir = t("@@bidi_dir");
   for (const element of document.querySelectorAll("[data-i18n]")) {
     element.textContent = t(element.dataset.i18n);
@@ -68,7 +70,7 @@ async function init() {
 }
 
 async function getSettings() {
-  const stored = await chrome.storage.sync.get({ floatlySettings: defaultSettings });
+  const stored = await extension.storage.sync.get({ floatlySettings: defaultSettings });
   return mergeSettings(stored.floatlySettings);
 }
 
@@ -169,7 +171,7 @@ async function saveControl(key, value) {
 }
 
 async function save(settings) {
-  await chrome.storage.sync.set({ floatlySettings: settings });
+  await extension.storage.sync.set({ floatlySettings: settings });
 }
 
 async function setShortcut(event, key, input) {

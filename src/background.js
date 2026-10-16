@@ -1,29 +1,31 @@
+const extension = globalThis.browser ?? globalThis.chrome;
+
 let cachedSettings = {};
-chrome.storage.sync.get({ floatlySettings: {} }).then(({ floatlySettings }) => {
+extension.storage.sync.get({ floatlySettings: {} }).then(({ floatlySettings }) => {
   cachedSettings = floatlySettings;
 }).catch((error) => console.error("Floatly settings preload failed.", error));
-chrome.storage.onChanged.addListener((changes, area) => {
+extension.storage.onChanged.addListener((changes, area) => {
   if (area === "sync" && changes.floatlySettings) cachedSettings = changes.floatlySettings.newValue ?? {};
 });
 
-chrome.runtime.onInstalled.addListener(async () => {
+extension.runtime.onInstalled.addListener(async () => {
   try {
-    await chrome.contextMenus.removeAll();
-    chrome.contextMenus.create({
+    await extension.contextMenus.removeAll();
+    extension.contextMenus.create({
       id: "floatly-open-pip",
-      title: chrome.i18n.getMessage("openInPip"),
+      title: extension.i18n.getMessage("openInPip"),
       contexts: ["page", "video", "image", "link", "selection", "editable", "frame"],
       documentUrlPatterns: ["http://*/*", "https://*/*", "file:///*"],
     }, () => {
-      if (chrome.runtime.lastError) console.error("Floatly context menu setup failed.", chrome.runtime.lastError);
+      if (extension.runtime.lastError) console.error("Floatly context menu setup failed.", extension.runtime.lastError);
     });
   } catch (error) {
     console.error("Floatly context menu setup failed.", error);
   }
 });
 
-chrome.action.onClicked.addListener(openPiP);
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+extension.action.onClicked.addListener(openPiP);
+extension.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "floatly-open-pip") return openPiP(tab);
 });
 
@@ -33,11 +35,14 @@ async function openPiP(tab) {
 
   try {
     // requestWindow must run in the first injection, while the toolbar or menu click is still active.
-    const [opening] = await chrome.scripting.executeScript({
+    const [opening] = await extension.scripting.executeScript({
       target: { tabId: tab.id },
       world: "MAIN",
+      injectImmediately: true,
       func: async (settings) => {
-        if (!("documentPictureInPicture" in window)) return false;
+        if (!("documentPictureInPicture" in window)) {
+          throw new Error("Floatly requires Document Picture-in-Picture (Chrome 121+ or Firefox 151+ on desktop).");
+        }
         const state = (window.__floatlyState ??= {});
         if (state.opening || state.preparing) return false;
         if (state.cancelPicker) {
@@ -67,34 +72,32 @@ async function openPiP(tab) {
       },
       args: [cachedSettings],
     });
+    if (opening && "error" in opening) throw opening.error;
     if (!opening?.result) return;
     const adapterIds = await loadAdapterIds();
-    const response = await fetch(chrome.runtime.getURL("src/floatly.css"));
+    const response = await fetch(extension.runtime.getURL("src/floatly.css"));
     if (!response.ok) throw new Error("Could not load Floatly styles.");
     const css = await response.text();
-    const { floatlySettings: settings } = await chrome.storage.sync.get({ floatlySettings: {} });
-    const catalogResponse = await fetch(chrome.runtime.getURL("_locales/en/messages.json"));
+    const { floatlySettings: settings } = await extension.storage.sync.get({ floatlySettings: {} });
+    const catalogResponse = await fetch(extension.runtime.getURL("_locales/en/messages.json"));
     if (!catalogResponse.ok) throw new Error("Could not load Floatly message catalog.");
     const catalog = await catalogResponse.json();
-    const messages = Object.fromEntries(Object.keys(catalog).map((key) => [key, chrome.i18n.getMessage(key)]));
-    const language = chrome.i18n.getUILanguage();
-    const direction = chrome.i18n.getMessage("@@bidi_dir");
+    const messages = Object.fromEntries(Object.keys(catalog).map((key) => [key, extension.i18n.getMessage(key)]));
+    const language = extension.i18n.getUILanguage();
+    const direction = extension.i18n.getMessage("@@bidi_dir");
     const commandEvent = `floatly-command-${crypto.randomUUID()}`;
 
-    await chrome.scripting.executeScript({
+    for (const injection of [{
       target: { tabId: tab.id },
       world: "ISOLATED",
       func: installSettingsBridge,
       args: [commandEvent],
-    });
-    await chrome.scripting.executeScript({
+    }, {
       target: { tabId: tab.id },
       world: "MAIN",
       func: (data) => { window.__floatlyBootstrap = data; },
       args: [{ css, settings, commandEvent, messages, language, direction }],
-    });
-
-    await chrome.scripting.executeScript({
+    }, {
       target: { tabId: tab.id },
       world: "MAIN",
       files: [
@@ -102,13 +105,17 @@ async function openPiP(tab) {
         ...adapterIds.map((id) => `src/adapters/${id}/adapter.js`),
         "src/floatly.js"
       ]
-    });
+    }]) {
+      const results = await extension.scripting.executeScript(injection);
+      const failure = results.find((result) => "error" in result);
+      if (failure) throw failure.error;
+    }
   } catch (error) {
     if (!isExpectedInjectionFailure(error)) {
       console.error("Floatly injection failed.", error);
     }
     try {
-      await chrome.scripting.executeScript({
+      const results = await extension.scripting.executeScript({
         target: { tabId: tab.id },
         world: "MAIN",
         func: () => {
@@ -117,6 +124,8 @@ async function openPiP(tab) {
           if (state) { state.pendingPiP = null; state.preparing = false; }
         },
       });
+      const failure = results.find((result) => "error" in result);
+      if (failure) throw failure.error;
     } catch (cleanupError) {
       if (!isExpectedInjectionFailure(cleanupError)) console.error("Floatly pending PiP cleanup failed.", cleanupError);
     }
@@ -124,21 +133,25 @@ async function openPiP(tab) {
 }
 
 function installSettingsBridge(commandEvent) {
+  // Injected functions cannot capture the background page's extension API alias.
+  const extension = globalThis.browser ?? globalThis.chrome;
   window.__floatlySettingsBridgeCleanup?.();
   const saveSize = async (event) => {
     // Page-world messages are untrusted: accept only bounded dimensions, never settings or API names.
-    const data = event.detail;
-    if (event.target === document && data?.command === "dispose") {
+    if (event.target !== document || typeof event.detail !== "string" || event.detail.length > 1024) return;
+    let data;
+    try { data = JSON.parse(event.detail); } catch { return; }
+    if (data?.command === "dispose") {
       window.__floatlySettingsBridgeCleanup();
       return;
     }
-    if (event.target !== document || data?.command !== "saveWindowSize"
+    if (data?.command !== "saveWindowSize"
         || !Number.isInteger(data.width) || !Number.isInteger(data.height)
         || data.width < 1 || data.width > 10000 || data.height < 1 || data.height > 10000) return;
     try {
-      const { floatlySettings: settings } = await chrome.storage.sync.get({ floatlySettings: {} });
+      const { floatlySettings: settings } = await extension.storage.sync.get({ floatlySettings: {} });
       if (!settings.rememberWindowSize) return;
-      await chrome.storage.sync.set({ floatlySettings: {
+      await extension.storage.sync.set({ floatlySettings: {
         ...settings, windowSize: { width: data.width, height: data.height },
       } });
     } catch (error) {
@@ -150,7 +163,7 @@ function installSettingsBridge(commandEvent) {
 }
 
 function isRestrictedUrl(url = "") {
-  return /^(chrome|chrome-extension|edge|about|devtools):/i.test(url);
+  return /^(chrome|chrome-extension|moz-extension|resource|edge|about|devtools|view-source):/i.test(url);
 }
 
 function isExpectedInjectionFailure(error) {
@@ -158,7 +171,7 @@ function isExpectedInjectionFailure(error) {
 }
 
 async function loadAdapterIds() {
-  const response = await fetch(chrome.runtime.getURL("src/adapters/adapters.json"));
+  const response = await fetch(extension.runtime.getURL("src/adapters/adapters.json"));
   if (!response.ok) return [];
 
   const adapterIds = await response.json();
