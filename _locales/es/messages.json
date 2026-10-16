@@ -1,12 +1,12 @@
 {
-  "extensionName": { "message": "Floatly" },
+  "extensionName": { "message": "Floatly - Videos flotantes a tu manera" },
   "speedUp": { "message": "Aumentar velocidad" },
   "speedDown": { "message": "Disminuir velocidad" },
   "captions": { "message": "Subtítulos" },
   "autoplay": { "message": "Reproducir siguiente video automáticamente" },
   "videoInPip": { "message": "Este video está en PiP" },
   "extensionDescription": {
-    "message": "Abre el video principal de la página actual en un reproductor flotante."
+    "message": "Sigue viendo mientras navegas o trabajas. Videos flotantes con atajos de velocidad, subtítulos y reproducción automática en YouTube."
   },
   "openInPip": { "message": "Abrir en PiP" },
   "settingsTitle": { "message": "Configuración de Floatly" },

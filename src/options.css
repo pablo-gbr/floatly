@@ -83,6 +83,24 @@ label,
   gap: 8px 16px;
 }
 
+#shortcuts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  row-gap: 16px;
+}
+
+#shortcuts .field {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+#shortcuts input {
+  width: 100%;
+  min-width: 0;
+}
+
 input[type="color"] {
   width: 52px;
   height: 32px;

@@ -1,7 +1,7 @@
 {
-  "extensionName": { "message": "Floatly" },
+  "extensionName": { "message": "Floatly - Picture-in-Picture, Your Way" },
   "extensionDescription": {
-    "message": "Open the current page's main video in a lightweight floating player."
+    "message": "Keep watching while you browse or work. A floating video player with speed shortcuts, YouTube captions, and autoplay controls."
   },
   "openInPip": { "message": "Open in PiP" },
   "videoInPip": { "message": "This video is now in PiP" },
