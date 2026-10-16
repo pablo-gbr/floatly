@@ -1,5 +1,6 @@
 {
   "extensionName": { "message": "Floatly" },
+  "videoInPip": { "message": "Este video está en PiP" },
   "extensionDescription": {
     "message": "Abre el video principal de la página actual en un reproductor flotante."
   },

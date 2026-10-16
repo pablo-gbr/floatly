@@ -143,6 +143,7 @@
       }
     `,
     onEnter(context) {
+      addPiPPlaceholder(context);
       moveIntoPiP(".ytp-caption-window-container", context);
       addQualityControl(context);
       addChapterPreview(context, this);
@@ -151,6 +152,31 @@
       document.querySelector(".ytp-next-button.ytp-button")?.click();
     },
   });
+
+  function addPiPPlaceholder(context) {
+    const player = document.querySelector("#movie_player");
+    if (!player) return;
+    const placeholder = document.createElement("div");
+    placeholder.className = "floatly-pip-placeholder";
+    placeholder.lang = context.pip.document.documentElement.lang;
+    placeholder.dir = context.pip.document.documentElement.dir;
+    const shadow = placeholder.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
+    style.textContent = `
+      :host { all: initial !important; position: absolute !important; inset: 0 !important;
+        z-index: 2147483647 !important; display: grid !important;
+        place-items: center !important; pointer-events: none !important;
+        color: #fff !important; text-align: center !important;
+        font: 500 clamp(14px, 2vw, 22px)/1.5 system-ui, sans-serif !important; }
+      p { margin: 16px; padding: 12px 20px; border-radius: 8px; background: #0f0f0f; }
+    `;
+    const message = document.createElement("p");
+    message.setAttribute("role", "status");
+    message.textContent = context.t("videoInPip");
+    shadow.append(style, message);
+    context.addCleanup(() => placeholder.remove());
+    player.append(placeholder);
+  }
 
   function readChapters(data) {
     const chapters = new Map();

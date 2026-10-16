@@ -4,6 +4,7 @@
     "message": "Open the current page's main video in a lightweight floating player."
   },
   "openInPip": { "message": "Open in PiP" },
+  "videoInPip": { "message": "This video is now in PiP" },
   "settingsTitle": { "message": "Floatly Settings" },
   "reset": { "message": "Reset" },
   "controls": { "message": "Controls" },
